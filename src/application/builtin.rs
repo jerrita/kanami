@@ -17,7 +17,7 @@ impl super::Application for BuiltinApp {
     }
 
     async fn on_load(&mut self) -> Result<()> {
-        log::info!("plugn <{}> loaded", self.name());
+        log::info!("app <{}> loaded", self.name());
         Ok(())
     }
 

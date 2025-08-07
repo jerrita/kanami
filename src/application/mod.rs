@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    application::{builtin::BuiltinApp, ping::PingPlugin},
+    application::{builtin::BuiltinApp, ping::PingApp},
     protocol::event::Event,
 };
 use anyhow::Result;
@@ -28,6 +28,6 @@ fn create_app(app: Box<dyn Application>) -> AppType {
 lazy_static! {
     pub static ref APPS: [AppType; 2] = [
         create_app(Box::new(BuiltinApp::new())),
-        create_app(Box::new(PingPlugin::new()))
+        create_app(Box::new(PingApp::new()))
     ];
 }

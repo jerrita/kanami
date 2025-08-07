@@ -5,15 +5,15 @@ use async_trait::async_trait;
 
 use crate::protocol::event::Event;
 
-struct TemplatePlugin;
+struct TemplateApp;
 
 #[async_trait]
-impl super::Application for TemplatePlugin {
+impl super::Application for TemplateApp {
     fn name(&self) -> &str {
         "template"
     }
     async fn on_load(&mut self) -> Result<()> {
-        log::info!("plugn <{}> loaded", self.name());
+        log::info!("app <{}> loaded", self.name());
         Ok(())
     }
 
@@ -22,7 +22,7 @@ impl super::Application for TemplatePlugin {
     }
 }
 
-impl TemplatePlugin {
+impl TemplateApp {
     pub fn new() -> Self {
         Self {}
     }

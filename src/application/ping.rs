@@ -8,16 +8,16 @@ use crate::{
     protocol::event::{Event, MessageEvent},
 };
 
-pub struct PingPlugin;
+pub struct PingApp;
 
 #[async_trait]
-impl super::Application for PingPlugin {
+impl super::Application for PingApp {
     fn name(&self) -> &str {
         "ping"
     }
 
     async fn on_load(&mut self) -> Result<()> {
-        log::info!("plugn <{}> loaded", self.name());
+        log::info!("app <{}> loaded", self.name());
         Ok(())
     }
 
@@ -31,7 +31,7 @@ impl super::Application for PingPlugin {
     }
 }
 
-impl PingPlugin {
+impl PingApp {
     pub fn new() -> Self {
         Self {}
     }
