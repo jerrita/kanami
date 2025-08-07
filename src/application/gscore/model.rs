@@ -77,7 +77,7 @@ impl From<&MessageEvent> for MessageReceive {
     fn from(value: &MessageEvent) -> Self {
         match value {
             MessageEvent::Group(event) => Self {
-                bot_id: "kanami".to_string(),
+                bot_id: config::GSCORE_BOTID.to_string(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Group,
@@ -98,7 +98,7 @@ impl From<&MessageEvent> for MessageReceive {
                 content: (&event.message).into(),
             },
             MessageEvent::Private(event) => Self {
-                bot_id: "kanami".to_string(),
+                bot_id: config::GSCORE_BOTID.to_string(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Direct,

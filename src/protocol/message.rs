@@ -279,7 +279,7 @@ impl Debug for Segment {
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for segment in &self.0 {
-            write!(f, "{:?}", segment)?;
+            write!(f, "{:?} ", segment)?;
         }
         Ok(())
     }
