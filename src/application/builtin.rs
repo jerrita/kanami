@@ -25,24 +25,10 @@ impl super::Application for BuiltinApp {
         match event.as_ref() {
             Event::MessageEvent(event) => match event {
                 MessageEvent::Group(event) => {
-                    let mut group_name = self.group_map.get(&event.group_id);
-                    if group_name.is_none() {
-                        let bot = get_bot().await;
-                        let res = bot.get_group_info(event.group_id, false).await?;
-                        self.group_map.insert(
-                            event.group_id,
-                            res.data
-                                .get("group_name")
-                                .ok_or(anyhow!("failed get group info."))?
-                                .as_str()
-                                .unwrap_or("<unknown>")
-                                .to_string(),
-                        );
-                        group_name = self.group_map.get(&event.group_id)
-                    };
+                    let group_name = self.get_group_name(event.group_id).await?;
                     log::info!(
                         "{}({}): {}({}) -> {}",
-                        unsafe { group_name.unwrap_unchecked() },
+                        group_name,
                         event.group_id,
                         event.sender.nickname,
                         event.sender.user_id,
@@ -70,5 +56,22 @@ impl BuiltinApp {
         Self {
             group_map: HashMap::new(),
         }
+    }
+
+    async fn get_group_name(&mut self, group_id: i64) -> Result<&String> {
+        if !self.group_map.contains_key(&group_id) {
+            let bot = get_bot().await;
+            let res = bot.get_group_info(group_id, false).await?;
+            let group_name = res
+                .data
+                .get("group_name")
+                .ok_or(anyhow!("failed get group info."))?
+                .as_str()
+                .unwrap_or("<unknown>")
+                .to_string();
+            self.group_map.insert(group_id, group_name);
+        }
+
+        Ok(unsafe { self.group_map.get(&group_id).unwrap_unchecked() })
     }
 }
