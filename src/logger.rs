@@ -12,7 +12,7 @@ pub fn init() {
     log::set_max_level(if let Ok(level) = std::env::var("LOG") {
         log::LevelFilter::from_str(&level).unwrap()
     } else {
-        log::LevelFilter::Debug
+        log::LevelFilter::Info
     });
 }
 
