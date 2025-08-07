@@ -150,8 +150,8 @@ async fn process_message_send(send: MessageSend) -> Result<()> {
 
         let data: Message = content.into();
         let forwards: Vec<Segment> = data
-            .0
-            .iter()
+            .clone()
+            .into_iter()
             .flat_map(|segment| {
                 if let Segment::Node {
                     id: _,
@@ -161,8 +161,7 @@ async fn process_message_send(send: MessageSend) -> Result<()> {
                 } = segment
                 {
                     content
-                        .0
-                        .iter()
+                        .into_iter()
                         .map(|x| Segment::Node {
                             id: None,
                             user_id: user_id.clone(),

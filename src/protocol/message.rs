@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Debug};
 
 /// OneBot 消息段枚举，支持所有标准消息段类型
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Segment {
     /// 纯文本消息段
@@ -200,7 +200,7 @@ pub enum Segment {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Message(pub Vec<Segment>);
 
-impl fmt::Display for Segment {
+impl Debug for Segment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Segment::Text { text } => write!(f, "{}", text),
@@ -279,7 +279,7 @@ impl fmt::Display for Segment {
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for segment in &self.0 {
-            write!(f, "{}", segment)?;
+            write!(f, "{:?}", segment)?;
         }
         Ok(())
     }

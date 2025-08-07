@@ -132,7 +132,7 @@ impl From<&Segment> for GSCoreMessage {
             } => GSCoreMessage::Image(file.clone()),
             Segment::At { qq } => GSCoreMessage::At(qq.clone()),
             Segment::Reply { id } => GSCoreMessage::Reply(id.clone()),
-            _ => GSCoreMessage::Text(format!("<unsupp: {}>", value)),
+            _ => GSCoreMessage::Text(format!("<unsupp: {:?}>", value)),
         }
     }
 }
