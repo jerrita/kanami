@@ -1,7 +1,5 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use std::fmt;
 
 /// OneBot 消息段枚举，支持所有标准消息段类型
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -23,7 +21,8 @@ pub enum Segment {
         file: String,
         /// 图片类型，flash 表示闪照，无此参数表示普通图片
         #[serde(skip_serializing_if = "Option::is_none")]
-        r#type: Option<String>,
+        #[serde(rename = "type")]
+        catagary: Option<String>,
         /// 图片 URL（接收时）
         #[serde(skip_serializing_if = "Option::is_none")]
         url: Option<String>,
@@ -88,7 +87,8 @@ pub enum Segment {
     /// 戳一戳消息段
     Poke {
         /// 戳一戳类型
-        r#type: String,
+        #[serde(rename = "type")]
+        catagary: String,
         /// 戳一戳 ID
         id: String,
         /// 表情名（接收时）
@@ -117,7 +117,8 @@ pub enum Segment {
     /// 推荐联系人消息段（好友/群）
     Contact {
         /// 推荐类型：qq（好友）或 group（群）
-        r#type: String,
+        #[serde(rename = "type")]
+        catagary: String,
         /// 被推荐的 QQ 号或群号
         id: String,
     },
@@ -137,7 +138,8 @@ pub enum Segment {
     /// 音乐分享消息段
     Music {
         /// 音乐类型：qq、163、xm 或 custom
-        r#type: String,
+        #[serde(rename = "type")]
+        catagary: String,
         /// 歌曲 ID（非自定义音乐）
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -180,7 +182,7 @@ pub enum Segment {
         nickname: Option<String>,
         /// 消息内容（自定义节点）
         #[serde(skip_serializing_if = "Option::is_none")]
-        content: Option<Value>,
+        content: Option<Message>,
     },
     /// XML 消息段
     Xml {
@@ -203,7 +205,17 @@ impl fmt::Display for Segment {
         match self {
             Segment::Text { text } => write!(f, "{}", text),
             Segment::Face { id } => write!(f, "[face:{}]", id),
-            Segment::Image { file, .. } => write!(f, "[image:{}]", file),
+            Segment::Image { file, .. } => {
+                if file.len() < 20 {
+                    write!(f, "[image:{}]", file)
+                } else {
+                    write!(
+                        f,
+                        "[image:{}...]",
+                        file.chars().take(20).collect::<String>()
+                    )
+                }
+            }
             Segment::Record { file, .. } => write!(f, "[record:{}]", file),
             Segment::Video { file, .. } => write!(f, "[video:{}]", file),
             Segment::At { qq } => {
@@ -225,10 +237,10 @@ impl fmt::Display for Segment {
             }
             Segment::Anonymous { .. } => write!(f, "[匿名]"),
             Segment::Share { title, url, .. } => write!(f, "[分享:{} - {}]", title, url),
-            Segment::Contact { r#type, id } => match r#type.as_str() {
+            Segment::Contact { catagary, id } => match catagary.as_str() {
                 "qq" => write!(f, "[推荐好友:{}]", id),
                 "group" => write!(f, "[推荐群:{}]", id),
-                _ => write!(f, "[推荐联系人:{}:{}]", r#type, id),
+                _ => write!(f, "[推荐联系人:{}:{}]", catagary, id),
             },
             Segment::Location {
                 title, lat, lon, ..
@@ -239,11 +251,13 @@ impl fmt::Display for Segment {
                     write!(f, "[位置:({}, {})]", lat, lon)
                 }
             }
-            Segment::Music { r#type, title, .. } => {
+            Segment::Music {
+                catagary, title, ..
+            } => {
                 if let Some(title) = title {
                     write!(f, "[音乐:{}]", title)
                 } else {
-                    write!(f, "[音乐分享:{}]", r#type)
+                    write!(f, "[音乐分享:{}]", catagary)
                 }
             }
             Segment::Reply { id } => write!(f, "[回复:{}]", id),
@@ -268,6 +282,19 @@ impl fmt::Display for Message {
             write!(f, "{}", segment)?;
         }
         Ok(())
+    }
+}
+
+impl Segment {
+    pub fn image(url: String) -> Self {
+        Self::Image {
+            file: url,
+            catagary: None,
+            url: None,
+            cache: None,
+            proxy: None,
+            timeout: None,
+        }
     }
 }
 

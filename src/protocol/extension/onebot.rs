@@ -20,7 +20,9 @@ impl Protocol {
     where
         T: Into<Message>,
     {
-        let data = json!({"user_id": user_id, "message": message.into()});
+        let message = message.into();
+        log::info!("User({}) <- {}", user_id, message);
+        let data = json!({"user_id": user_id, "message": message});
         self.send_request("send_private_msg", data).await
     }
 
@@ -38,7 +40,9 @@ impl Protocol {
     where
         T: Into<Message>,
     {
-        let data = json!({"group_id": group_id, "message": message.into()});
+        let message = message.into();
+        log::info!("Group({}) <- {}", group_id, message);
+        let data = json!({"group_id": group_id, "message": message});
         self.send_request("send_group_msg", data).await
     }
 

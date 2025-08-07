@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    application::{builtin::BuiltinApp, ping::PingApp},
+    application::{builtin::BuiltinApp, ping::PingApp, gscore::GSCoreAdapter},
     protocol::event::Event,
 };
 use anyhow::Result;
@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 
 mod builtin;
 mod ping;
+mod gscore;
 
 type AppType = Arc<Mutex<Box<dyn Application>>>;
 
@@ -26,8 +27,9 @@ fn create_app(app: Box<dyn Application>) -> AppType {
 }
 
 lazy_static! {
-    pub static ref APPS: [AppType; 2] = [
+    pub static ref APPS: [AppType; 3] = [
         create_app(Box::new(BuiltinApp::new())),
-        create_app(Box::new(PingApp::new()))
+        create_app(Box::new(PingApp::new())),
+        create_app(Box::new(GSCoreAdapter::new())),
     ];
 }

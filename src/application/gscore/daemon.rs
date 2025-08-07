@@ -1,0 +1,203 @@
+use crate::config;
+use crate::protocol::get_bot;
+use crate::protocol::message::Segment;
+use crate::{application::gscore::model::*, protocol::message::Message};
+use anyhow::{Result, anyhow};
+use futures_util::{SinkExt, StreamExt};
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio_tungstenite::{
+    connect_async_with_config,
+    tungstenite::{Message as WsMessage, protocol::WebSocketConfig},
+};
+
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// GSCore主循环，处理自动重连
+pub async fn gscore_loop(mut receiver: mpsc::UnboundedReceiver<MessageReceive>) {
+    let mut retry = 0u32;
+    loop {
+        match connect_gscore().await {
+            Ok(ws) => {
+                retry = 0;
+                if let Err(e) = event_loop(ws, &mut receiver).await {
+                    log::error!("GSCore event loop error: {}", e);
+                }
+            }
+            Err(e) => {
+                log::warn!("GSCore connection error: {}", e);
+            }
+        }
+        log::info!("GSCore reconnecting after 3s. times: {}", retry);
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        retry += 1;
+    }
+}
+
+async fn connect_gscore() -> Result<WsStream> {
+    log::info!("Connecting to GSCore at {}", config::GSCORE_ENDPOINT);
+
+    let mut config = WebSocketConfig::default();
+    config.max_message_size = Some(64 * 1024 * 1024);
+    config.max_frame_size = Some(16 * 1024 * 1024);
+
+    let (ws, _) = connect_async_with_config(config::GSCORE_ENDPOINT, Some(config), false).await?;
+
+    log::info!("GSCore WebSocket connection established");
+    Ok(ws)
+}
+
+async fn event_loop(
+    ws: WsStream,
+    receiver: &mut mpsc::UnboundedReceiver<MessageReceive>,
+) -> Result<()> {
+    let (mut ws_sender, mut ws_receiver) = ws.split();
+    loop {
+        tokio::select! {
+            // 处理来自应用的消息
+            msg = receiver.recv() => {
+                match msg {
+                    Some(message_receive) => {
+                        let json_str = serde_json::to_string(&message_receive)?;
+                        log::debug!("Sending message to GSCore: {}", json_str);
+                        // GSCore 期望接收 bytes 格式，所以发送 Binary 消息而不是 Text
+                        if let Err(e) = ws_sender.send(WsMessage::Binary(json_str.into())).await {
+                            log::error!("Failed to send message to GSCore: {}", e);
+                            return Err(anyhow!("Send error: {}", e));
+                        }
+                    }
+                    None => {
+                        log::info!("Receiver channel closed");
+                        return Ok(());
+                    }
+                }
+            }
+            // 处理来自 GSCore 的消息
+            ws_msg = ws_receiver.next() => {
+                match ws_msg {
+                    Some(Ok(WsMessage::Text(text))) => {
+                        if let Err(e) = handle_gscore_message(&text).await {
+                            log::error!("Failed to handle GSCore message: {}", e);
+                        }
+                    }
+                    Some(Ok(WsMessage::Binary(data))) => {
+                        // 尝试将二进制数据转换为 UTF-8 字符串
+                        match String::from_utf8(data.to_vec()) {
+                            Ok(text) => {
+                                if let Err(e) = handle_gscore_message(&text).await {
+                                    log::error!("Failed to handle GSCore binary message: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Received non-UTF8 binary message from GSCore: {}", e);
+                            }
+                        }
+                    }
+                    Some(Ok(WsMessage::Ping(payload))) => {
+                        if let Err(e) = ws_sender.send(WsMessage::Pong(payload)).await {
+                            log::error!("Failed to send pong: {}", e);
+                            return Err(anyhow!("Pong error: {}", e));
+                        }
+                        log::debug!("Responded to ping from GSCore");
+                    }
+                    Some(Ok(WsMessage::Pong(_))) => {
+                        log::debug!("Received pong from GSCore");
+                    }
+                    Some(Ok(WsMessage::Close(_))) => {
+                        log::info!("GSCore connection closed");
+                        return Ok(());
+                    }
+                    Some(Err(e)) => {
+                        log::error!("WebSocket error: {}", e);
+                        return Err(anyhow!("WebSocket error: {}", e));
+                    }
+                    None => {
+                        log::info!("WebSocket stream ended");
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// 处理来自 GSCore 的消息
+async fn handle_gscore_message(text: &str) -> Result<()> {
+    log::debug!(
+        "Received from GSCore: {}...",
+        text.chars().take(200).collect::<String>()
+    );
+    match serde_json::from_str::<MessageSend>(text) {
+        Ok(msg_send) => {
+            process_message_send(msg_send).await?;
+        }
+        Err(e) => {
+            log::warn!("Failed to parse GSCore message as MessageSend: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+async fn process_message_send(send: MessageSend) -> Result<()> {
+    if let Some(content) = &send.content {
+        if let Some(GSCoreMessage::Log(msg)) = content.first() {
+            log::info!("GSCore: {}", msg);
+            return Ok(());
+        }
+
+        let data: Message = content.into();
+        let forwards: Vec<Segment> = data
+            .0
+            .iter()
+            .flat_map(|segment| {
+                if let Segment::Node {
+                    id: _,
+                    user_id,
+                    nickname,
+                    content: Some(content),
+                } = segment
+                {
+                    content
+                        .0
+                        .iter()
+                        .map(|x| Segment::Node {
+                            id: None,
+                            user_id: user_id.clone(),
+                            nickname: nickname.clone(),
+                            content: Some(x.clone().into()),
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+
+        let target_type = match send.target_type.ok_or(anyhow!("no target_type"))? {
+            TargetType::Group => "group",
+            _ => "private",
+        };
+        let target: i64 = send.target_id.ok_or(anyhow!("no target_id"))?.parse()?;
+
+        if forwards.len() > 0 {
+            get_bot()
+                .await
+                .send_forward_msg(
+                    Some(target_type),
+                    Some(target),
+                    Some(target),
+                    &forwards.into(),
+                )
+                .await?;
+        } else {
+            get_bot()
+                .await
+                .send_message(Some(target_type), Some(target), Some(target), &data)
+                .await?;
+        }
+    }
+    Ok(())
+}

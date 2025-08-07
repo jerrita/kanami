@@ -81,8 +81,17 @@ pub struct GroupSender {
     pub age: Option<i32>,
     pub area: Option<String>,
     pub level: Option<String>,
-    pub role: Option<String>,
+    pub role: Option<GroupRole>,
     pub title: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[allow(unused)]
+pub enum GroupRole {
+    Owner,
+    Admin,
+    Member,
 }
 
 #[derive(Debug, Deserialize)]

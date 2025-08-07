@@ -119,7 +119,7 @@ async fn event_loop(ws: WsStream) -> Result<()> {
     });
     let task_sender = tokio::spawn(async move {
         while let Some(request) = req_rx.recv().await {
-            log::debug!("request: {:?} -> {}", request.action, request.params);
+            log::debug!("request: {:?}", request.action);
             if let Ok(message_str) = serde_json::to_string(&request) {
                 let message = Message::from(message_str);
                 pending_requests.insert(request.echo.clone(), request.sender);

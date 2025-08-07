@@ -3,3 +3,4 @@
 // https://napcat.apifox.cn
 
 pub mod onebot;
+pub mod napcat;
