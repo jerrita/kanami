@@ -22,10 +22,18 @@ impl super::Application for PingApp {
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
-        if let Event::MessageEvent(MessageEvent::Private(event)) = event.as_ref() {
-            if event.sender.user_id == config::OWNER && event.raw_message == "ping" {
-                event.reply("pong", true).await?;
+        match event.as_ref() {
+            Event::MessageEvent(MessageEvent::Private(event)) => {
+                if event.sender.user_id == config::OWNER && event.raw_message == "ping" {
+                    event.reply("pong", true).await?;
+                }
             }
+            Event::MessageEvent(MessageEvent::Group(event)) => {
+                if event.group_id == config::MAIN_GROOUP && event.raw_message == "ping" {
+                    event.reply("pong", true).await?;
+                }
+            }
+            _ => {}
         }
         Ok(())
     }

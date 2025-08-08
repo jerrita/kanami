@@ -40,7 +40,8 @@ impl Log for Logger {
                 "[{}][{:>5}][{}][{}] {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
-                record.file().unwrap_or_default(),
+                // record.file().unwrap_or_default(),
+                record.target(),
                 record.line().unwrap_or(0),
                 record.args()
             ),

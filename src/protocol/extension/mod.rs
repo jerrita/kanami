@@ -1,6 +1,5 @@
 // Protocol extension
-// https://napneko.github.io
-// https://napcat.apifox.cn
 
-pub mod onebot;
+#[cfg(feature = "napcat")]
 pub mod napcat;
+pub mod onebot;

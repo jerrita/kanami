@@ -1,3 +1,6 @@
+// https://napneko.github.io
+// https://napcat.apifox.cn
+
 use crate::protocol::{Protocol, adapter::Response, message::Message};
 use anyhow::Result;
 use serde_json::json;

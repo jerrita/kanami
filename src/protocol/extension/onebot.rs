@@ -66,6 +66,18 @@ impl Protocol {
         group_id: Option<i64>,
         message: &Message,
     ) -> Result<Response> {
+        match (message_type, user_id, group_id) {
+            (Some("private"), Some(uid), _) | (None, Some(uid), None) => {
+                log::info!("User({}) <- {}", uid, message);
+            }
+            (Some("group"), _, Some(gid)) | (None, _, Some(gid)) => {
+                log::info!("Group({}) <- {}", gid, message);
+            }
+            _ => {
+                log::info!("Send message: {}", message);
+            }
+        }
+        
         let mut data = json!({"message": message});
         if let Some(msg_type) = message_type {
             data["message_type"] = json!(msg_type);
