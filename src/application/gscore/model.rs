@@ -17,6 +17,7 @@ pub enum GSCoreMessage {
     Image(String),
     At(String),
     Reply(String),
+    Group(String),
     Node(Vec<GSCoreMessageWithoutNode>),
 }
 
@@ -191,13 +192,22 @@ impl From<&GSCoreMessageWithoutNode> for Segment {
 
 impl From<&Vec<GSCoreMessage>> for Message {
     fn from(value: &Vec<GSCoreMessage>) -> Self {
-        let msg: Vec<Segment> = value.iter().map(|e| e.into()).collect();
+        let msg: Vec<Segment> = value
+            .iter()
+            .filter_map(|e| {
+                if let GSCoreMessage::Group(_) = e {
+                    None
+                } else {
+                    Some(e.into())
+                }
+            })
+            .collect();
         msg.into()
     }
 }
 
 impl From<&Message> for Vec<GSCoreMessage> {
     fn from(value: &Message) -> Self {
-        value.0.iter().map(|seg| seg.into()).collect()
+        value.into_iter().map(|seg| seg.into()).collect()
     }
 }

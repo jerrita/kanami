@@ -127,7 +127,7 @@ async fn event_loop(
 async fn handle_gscore_message(text: &str) -> Result<()> {
     log::debug!(
         "Received from GSCore: {}...",
-        text.chars().take(200).collect::<String>()
+        text.chars().take(400).collect::<String>()
     );
     match serde_json::from_str::<MessageSend>(text) {
         Ok(msg_send) => {
