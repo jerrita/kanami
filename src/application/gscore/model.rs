@@ -171,6 +171,39 @@ impl From<&GSCoreMessage> for Segment {
     }
 }
 
+impl From<GSCoreMessage> for Segment {
+    fn from(value: GSCoreMessage) -> Self {
+        match value {
+            GSCoreMessage::Text(text) => Segment::Text { text },
+            GSCoreMessage::Markdown(text) => Segment::Text { text },
+            GSCoreMessage::Image(url) => Segment::Image {
+                file: url,
+                catagary: None,
+                url: None,
+                cache: None,
+                proxy: None,
+                timeout: None,
+            },
+            GSCoreMessage::At(qq) => Segment::At { qq },
+            GSCoreMessage::Reply(id) => Segment::Reply { id },
+            GSCoreMessage::Node(node) => Segment::Node {
+                id: None,
+                user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
+                nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                content: Some(
+                    node.into_iter()
+                        .map(|seg| seg.into())
+                        .collect::<Vec<Segment>>()
+                        .into(),
+                ),
+            },
+            _ => Segment::Text {
+                text: format!("<unsupp: {:?}>", value),
+            },
+        }
+    }
+}
+
 impl From<&GSCoreMessageWithoutNode> for Segment {
     fn from(value: &GSCoreMessageWithoutNode) -> Self {
         match value {
@@ -190,10 +223,29 @@ impl From<&GSCoreMessageWithoutNode> for Segment {
     }
 }
 
-impl From<&Vec<GSCoreMessage>> for Message {
-    fn from(value: &Vec<GSCoreMessage>) -> Self {
+impl From<GSCoreMessageWithoutNode> for Segment {
+    fn from(value: GSCoreMessageWithoutNode) -> Self {
+        match value {
+            GSCoreMessageWithoutNode::Text(text) => Segment::Text { text },
+            GSCoreMessageWithoutNode::Markdown(text) => Segment::Text { text },
+            GSCoreMessageWithoutNode::Image(url) => Segment::Image {
+                file: url,
+                catagary: None,
+                url: None,
+                cache: None,
+                proxy: None,
+                timeout: None,
+            },
+            GSCoreMessageWithoutNode::At(qq) => Segment::At { qq },
+            GSCoreMessageWithoutNode::Reply(id) => Segment::Reply { id },
+        }
+    }
+}
+
+impl From<Vec<GSCoreMessage>> for Message {
+    fn from(value: Vec<GSCoreMessage>) -> Self {
         let msg: Vec<Segment> = value
-            .iter()
+            .into_iter()
             .filter_map(|e| {
                 if let GSCoreMessage::Group(_) = e {
                     None

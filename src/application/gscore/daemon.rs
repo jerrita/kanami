@@ -15,7 +15,7 @@ type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// GSCore主循环，处理自动重连
-pub async fn gscore_loop(mut receiver: mpsc::UnboundedReceiver<MessageReceive>) {
+pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>) {
     let mut retry = 0u32;
     loop {
         match connect_gscore().await {
@@ -38,21 +38,20 @@ pub async fn gscore_loop(mut receiver: mpsc::UnboundedReceiver<MessageReceive>) 
 async fn connect_gscore() -> Result<WsStream> {
     log::info!("Connecting to GSCore at {}", config::GSCORE_ENDPOINT);
 
-    let mut config = WebSocketConfig::default();
-    config.max_message_size = Some(64 * 1024 * 1024);
-    config.max_frame_size = Some(16 * 1024 * 1024);
+    let mut ws_config = WebSocketConfig::default();
+    ws_config.max_message_size = Some(64 * 1024 * 1024);
+    ws_config.max_frame_size = Some(16 * 1024 * 1024);
 
-    let (ws, _) = connect_async_with_config(config::GSCORE_ENDPOINT, Some(config), false).await?;
+    let (ws, _) =
+        connect_async_with_config(config::GSCORE_ENDPOINT, Some(ws_config), false).await?;
 
-    log::info!("GSCore WebSocket connection established");
+    log::info!("GSCore WebSocket connection established with optimized memory settings");
     Ok(ws)
 }
 
-async fn event_loop(
-    ws: WsStream,
-    receiver: &mut mpsc::UnboundedReceiver<MessageReceive>,
-) -> Result<()> {
+async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>) -> Result<()> {
     let (mut ws_sender, mut ws_receiver) = ws.split();
+
     loop {
         tokio::select! {
             // 处理来自应用的消息
@@ -124,72 +123,81 @@ async fn event_loop(
 
 /// 处理来自 GSCore 的消息
 async fn handle_gscore_message(text: &str) -> Result<()> {
+    let msg_size = text.len();
     let preview = if text.len() > 400 { &text[..400] } else { text };
     log::debug!("Received from GSCore: {}...", preview);
 
-    match serde_json::from_str::<MessageSend>(text) {
-        Ok(msg_send) => {
-            process_message_send(msg_send).await?;
-        }
+    let msg_send = match serde_json::from_str::<MessageSend>(text) {
+        Ok(msg) => msg,
         Err(e) => {
             log::warn!("Failed to parse GSCore message as MessageSend: {}", e);
+            return Ok(()); // 直接返回，避免继续处理
         }
-    }
+    };
 
-    Ok(())
+    log::debug!("Processing MessageSend of size: {} bytes", msg_size);
+
+    // 处理消息
+    process_message_send(msg_send).await
 }
 
-async fn process_message_send(send: MessageSend) -> Result<()> {
-    if let Some(content) = &send.content {
-        if let Some(GSCoreMessage::Log(msg)) = content.first() {
-            log::info!("GSCore: {}", msg);
-            return Ok(());
-        }
+async fn process_message_send(mut send: MessageSend) -> Result<()> {
+    let content = match send.content.take() {
+        Some(content) => content,
+        None => return Ok(()), // 空内容直接返回
+    };
 
-        let data: Message = content.into();
+    if let Some(GSCoreMessage::Log(msg)) = content.first() {
+        log::info!("GSCore: {}", msg);
+        return Ok(());
+    }
 
-        let mut forwards: Vec<Segment> = Vec::new();
-        for segment in &data {
-            if let Segment::Node {
-                user_id,
-                nickname,
-                content: Some(content),
-                ..
-            } = segment
-            {
-                for x in content {
+    let target_type = match send.target_type.ok_or_else(|| anyhow!("no target_type"))? {
+        TargetType::Group => "group",
+        _ => "private",
+    };
+    let target: i64 = send
+        .target_id
+        .ok_or_else(|| anyhow!("no target_id"))?
+        .parse()?;
+
+    // 检查是否有需要展开的 Node 消息
+    let has_node = content
+        .iter()
+        .any(|msg| matches!(msg, GSCoreMessage::Node(_)));
+
+    if has_node {
+        // 构建 forwards
+        let mut forwards = Vec::new();
+        for gscore_msg in &content {
+            if let GSCoreMessage::Node(node_messages) = gscore_msg {
+                for node_msg in node_messages {
+                    let segment: Segment = node_msg.into();
                     forwards.push(Segment::Node {
                         id: None,
-                        user_id: user_id.clone(),
-                        nickname: nickname.clone(),
-                        content: Some(vec![x.clone()].into()),
+                        user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
+                        nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                        content: Some(vec![segment].into()),
                     });
                 }
             }
         }
 
-        let target_type = match send.target_type.ok_or(anyhow!("no target_type"))? {
-            TargetType::Group => "group",
-            _ => "private",
-        };
-        let target: i64 = send.target_id.ok_or(anyhow!("no target_id"))?.parse()?;
-
         if !forwards.is_empty() {
+            let forwards_msg: Message = forwards.into();
             get_bot()
                 .await
-                .send_forward_msg(
-                    Some(target_type),
-                    Some(target),
-                    Some(target),
-                    &forwards.into(),
-                )
+                .send_forward_msg(Some(target_type), Some(target), Some(target), &forwards_msg)
                 .await?;
-        } else {
-            get_bot()
-                .await
-                .send_message(Some(target_type), Some(target), Some(target), &data)
-                .await?;
+            return Ok(());
         }
     }
+
+    let data: Message = content.into();
+    get_bot()
+        .await
+        .send_message(Some(target_type), Some(target), Some(target), &data)
+        .await?;
+
     Ok(())
 }

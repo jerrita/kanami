@@ -77,7 +77,7 @@ impl Protocol {
                 log::info!("Send message: {}", message);
             }
         }
-        
+
         let mut data = json!({"message": message});
         if let Some(msg_type) = message_type {
             data["message_type"] = json!(msg_type);

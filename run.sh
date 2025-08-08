@@ -1,2 +1,2 @@
 killall kanami
-nohup cargo run --release 2>&1 > log &
+LOG=debug nohup cargo run --release 2>&1 > log &

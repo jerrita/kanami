@@ -14,7 +14,7 @@ mod model;
 use model::*;
 
 pub struct GSCoreAdapter {
-    sender: Option<mpsc::UnboundedSender<MessageReceive>>,
+    sender: Option<mpsc::Sender<MessageReceive>>,
 }
 
 #[async_trait]
@@ -26,8 +26,8 @@ impl super::Application for GSCoreAdapter {
     async fn on_load(&mut self) -> Result<()> {
         log::info!("app <{}> loaded", self.name());
 
-        // 启动GSCore连接任务
-        let (tx, rx) = mpsc::unbounded_channel();
+        // 使用有界通道，限制缓冲区大小，防止内存无限增长
+        let (tx, rx) = mpsc::channel(5);
         self.sender = Some(tx);
 
         tokio::spawn(async move {
@@ -46,7 +46,7 @@ impl super::Application for GSCoreAdapter {
             }
             if let Some(sender) = &self.sender {
                 let message_receive = msg_event.into();
-                if let Err(e) = sender.send(message_receive) {
+                if let Err(e) = sender.send(message_receive).await {
                     log::warn!("Failed to send message to GSCore handler: {}", e);
                 }
             }

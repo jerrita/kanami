@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    application::{builtin::BuiltinApp, ping::PingApp, gscore::GSCoreAdapter},
+    application::{builtin::BuiltinApp, gscore::GSCoreAdapter, ping::PingApp},
     protocol::event::Event,
 };
 use anyhow::Result;
@@ -10,8 +10,8 @@ use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
 mod builtin;
-mod ping;
 mod gscore;
+mod ping;
 
 type AppType = Arc<Mutex<Box<dyn Application>>>;
 
