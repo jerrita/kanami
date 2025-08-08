@@ -103,6 +103,7 @@ pub struct Anonymous {
 }
 
 impl PrivateMessage {
+    #[allow(unused)]
     pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
     where
         T: Into<Message>,
@@ -124,6 +125,7 @@ impl PrivateMessage {
 }
 
 impl GroupMessage {
+    #[allow(unused)]
     pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
     where
         T: Into<Message>,
