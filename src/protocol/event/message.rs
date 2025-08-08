@@ -103,7 +103,6 @@ pub struct Anonymous {
 }
 
 impl PrivateMessage {
-    #[allow(unused)]
     pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
     where
         T: Into<Message>,
@@ -125,7 +124,6 @@ impl PrivateMessage {
 }
 
 impl GroupMessage {
-    #[allow(unused)]
     pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
     where
         T: Into<Message>,
@@ -143,5 +141,52 @@ impl GroupMessage {
             .await
             .send_group_message(self.group_id, message)
             .await
+    }
+}
+
+impl MessageEvent {
+    #[allow(unused)]
+    pub fn message_id(&self) -> i32 {
+        match self {
+            MessageEvent::Group(x) => x.message_id,
+            MessageEvent::Private(x) => x.message_id,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn raw_message(&self) -> &str {
+        match self {
+            MessageEvent::Group(x) => &x.raw_message,
+            MessageEvent::Private(x) => &x.raw_message,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn user_id(&self) -> i64 {
+        match self {
+            MessageEvent::Group(x) => x.user_id,
+            MessageEvent::Private(x) => x.user_id,
+        }
+    }
+
+    #[allow(unused)]
+    pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
+    where
+        T: Into<Message>,
+    {
+        let mut message = message.into();
+        if quote {
+            message.insert(
+                0,
+                message::Segment::Reply {
+                    id: self.message_id().to_string(),
+                },
+            );
+        }
+        let bot = get_bot().await;
+        match self {
+            MessageEvent::Group(x) => bot.send_group_message(x.group_id, message).await,
+            MessageEvent::Private(x) => bot.send_private_message(x.user_id, message).await,
+        }
     }
 }
