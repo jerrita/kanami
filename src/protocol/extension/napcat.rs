@@ -20,14 +20,17 @@ impl Protocol {
     ///
     /// * `message_id` - 消息 ID (number int32)
     /// * `res_id` - resid (String)
-    pub async fn send_forward_msg(
+    pub async fn send_forward_msg<T>(
         &self,
         message_type: Option<&str>,
         user_id: Option<i64>,
         group_id: Option<i64>,
-        message: &Message,
-    ) -> Result<Response> {
-        let mut data = json!({"message": message});
+        message: T,
+    ) -> Result<Response>
+    where
+        T: Into<Message>,
+    {
+        let mut data = json!({"message": message.into()});
         if let Some(msg_type) = message_type {
             data["message_type"] = json!(msg_type);
         }

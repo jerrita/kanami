@@ -209,14 +209,7 @@ impl From<&GSCoreMessageWithoutNode> for Segment {
         match value {
             GSCoreMessageWithoutNode::Text(text) => Segment::Text { text: text.clone() },
             GSCoreMessageWithoutNode::Markdown(text) => Segment::Text { text: text.clone() },
-            GSCoreMessageWithoutNode::Image(url) => Segment::Image {
-                file: url.clone(),
-                catagary: None,
-                url: None,
-                cache: None,
-                proxy: None,
-                timeout: None,
-            },
+            GSCoreMessageWithoutNode::Image(url) => Segment::image(url.clone()),
             GSCoreMessageWithoutNode::At(qq) => Segment::At { qq: qq.clone() },
             GSCoreMessageWithoutNode::Reply(id) => Segment::Reply { id: id.clone() },
         }

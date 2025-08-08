@@ -3,7 +3,7 @@ use anyhow::{Result, anyhow};
 use futures_util::lock::Mutex;
 use lazy_static::lazy_static;
 use serde_json::Value;
-use tokio::sync::{mpsc::UnboundedSender, oneshot};
+use tokio::sync::{mpsc::Sender, oneshot};
 use uuid::Uuid;
 
 pub mod event;
@@ -12,7 +12,7 @@ pub mod message;
 pub mod adapter;
 mod extension;
 
-type RequestSender = UnboundedSender<Request>;
+type RequestSender = Sender<Request>;
 
 #[derive(Clone)]
 pub struct Protocol {
@@ -33,7 +33,8 @@ impl Protocol {
         self.sender
             .clone()
             .ok_or(anyhow!("sender not found"))?
-            .send(request)?;
+            .send(request)
+            .await?;
         Ok(rx.await?)
     }
 }

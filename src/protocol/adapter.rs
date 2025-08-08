@@ -5,12 +5,17 @@ use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt, stream::SplitStream};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{sync::Arc, time::Duration};
-use tokio::sync::{mpsc, oneshot};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+pub static ROUND_START_TIME: Mutex<SystemTime> = Mutex::const_new(SystemTime::UNIX_EPOCH);
 
 #[derive(Debug)]
 pub(crate) struct PendingRequest {
@@ -44,6 +49,7 @@ pub async fn listener(
     mut receiver: SplitStream<WsStream>,
 ) {
     while let Some(msg) = receiver.next().await {
+        *ROUND_START_TIME.lock().await = SystemTime::now();
         match msg {
             Ok(Message::Text(text)) => {
                 log::debug!("{}", text);
@@ -115,7 +121,7 @@ async fn connect() -> Result<WsStream> {
 
 async fn event_loop(ws: WsStream) -> Result<()> {
     let (mut ws_sender, ws_receiver) = ws.split();
-    let (req_tx, mut req_rx) = mpsc::unbounded_channel();
+    let (req_tx, mut req_rx) = mpsc::channel(5);
 
     super::update(req_tx).await;
     let pending_requests = Arc::new(DashMap::new());

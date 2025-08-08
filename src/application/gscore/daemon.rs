@@ -1,7 +1,7 @@
+use crate::application::gscore::model::*;
 use crate::config;
 use crate::protocol::get_bot;
 use crate::protocol::message::Segment;
-use crate::{application::gscore::model::*, protocol::message::Message};
 use anyhow::{Result, anyhow};
 use futures_util::{SinkExt, StreamExt};
 use std::time::Duration;
@@ -45,7 +45,7 @@ async fn connect_gscore() -> Result<WsStream> {
     let (ws, _) =
         connect_async_with_config(config::GSCORE_ENDPOINT, Some(ws_config), false).await?;
 
-    log::info!("GSCore WebSocket connection established with optimized memory settings");
+    log::info!("GSCore WebSocket connection established");
     Ok(ws)
 }
 
@@ -161,43 +161,37 @@ async fn process_message_send(mut send: MessageSend) -> Result<()> {
         .ok_or_else(|| anyhow!("no target_id"))?
         .parse()?;
 
-    // 检查是否有需要展开的 Node 消息
-    let has_node = content
+    let forwards = content
         .iter()
-        .any(|msg| matches!(msg, GSCoreMessage::Node(_)));
-
-    if has_node {
-        // 构建 forwards
-        let mut forwards = Vec::new();
-        for gscore_msg in &content {
-            if let GSCoreMessage::Node(node_messages) = gscore_msg {
-                for node_msg in node_messages {
-                    let segment: Segment = node_msg.into();
-                    forwards.push(Segment::Node {
-                        id: None,
-                        user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
-                        nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
-                        content: Some(vec![segment].into()),
-                    });
-                }
+        .filter_map(|x| {
+            if let GSCoreMessage::Node(x) = x {
+                Some(
+                    x.iter()
+                        .map(|e| Segment::Node {
+                            id: None,
+                            user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
+                            nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                            content: Some(Segment::from(e).into()),
+                        })
+                        .collect::<Vec<Segment>>(),
+                )
+            } else {
+                None
             }
-        }
+        })
+        .flatten()
+        .collect::<Vec<Segment>>();
 
-        if !forwards.is_empty() {
-            let forwards_msg: Message = forwards.into();
-            get_bot()
-                .await
-                .send_forward_msg(Some(target_type), Some(target), Some(target), &forwards_msg)
-                .await?;
-            return Ok(());
-        }
+    if !forwards.is_empty() {
+        get_bot()
+            .await
+            .send_forward_msg(Some(target_type), Some(target), Some(target), forwards)
+            .await?;
+    } else {
+        get_bot()
+            .await
+            .send_message(Some(target_type), Some(target), Some(target), content)
+            .await?;
     }
-
-    let data: Message = content.into();
-    get_bot()
-        .await
-        .send_message(Some(target_type), Some(target), Some(target), &data)
-        .await?;
-
     Ok(())
 }

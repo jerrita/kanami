@@ -59,13 +59,17 @@ impl Protocol {
     /// # 响应数据
     ///
     /// * `message_id` - 消息 ID (number int32)
-    pub async fn send_message(
+    pub async fn send_message<T>(
         &self,
         message_type: Option<&str>,
         user_id: Option<i64>,
         group_id: Option<i64>,
-        message: &Message,
-    ) -> Result<Response> {
+        message: T,
+    ) -> Result<Response>
+    where
+        T: Into<Message>,
+    {
+        let message = message.into();
         match (message_type, user_id, group_id) {
             (Some("private"), Some(uid), _) | (None, Some(uid), None) => {
                 log::info!("User({}) <- {}", uid, message);

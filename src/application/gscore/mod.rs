@@ -26,8 +26,7 @@ impl super::Application for GSCoreAdapter {
     async fn on_load(&mut self) -> Result<()> {
         log::info!("app <{}> loaded", self.name());
 
-        // 使用有界通道，限制缓冲区大小，防止内存无限增长
-        let (tx, rx) = mpsc::channel(5);
+        let (tx, rx) = mpsc::channel(1);
         self.sender = Some(tx);
 
         tokio::spawn(async move {
