@@ -6,7 +6,7 @@ mod config;
 mod logger;
 mod protocol;
 
-#[tokio::main(worker_threads = 2)]
+#[tokio::main(worker_threads = 4)]
 async fn main() -> Result<()> {
     logger::init();
     log::info!("Hello Kanami Bot!");

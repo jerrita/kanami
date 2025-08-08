@@ -12,6 +12,12 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
+#[derive(Debug)]
+pub(crate) struct PendingRequest {
+    sender: oneshot::Sender<Response>,
+    created_at: std::time::Instant,
+}
+
 #[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct Response {
@@ -27,13 +33,14 @@ pub struct Request {
     pub action: String,
     pub params: Value,
     pub echo: String,
-
+    #[serde(skip_serializing)]
+    pub created_at: std::time::Instant,
     #[serde(skip_serializing)]
     pub sender: oneshot::Sender<Response>,
 }
 
 pub async fn listener(
-    pending_requests: Arc<DashMap<String, oneshot::Sender<Response>>>,
+    pending_requests: Arc<DashMap<String, PendingRequest>>,
     mut receiver: SplitStream<WsStream>,
 ) {
     while let Some(msg) = receiver.next().await {
@@ -42,10 +49,10 @@ pub async fn listener(
                 log::debug!("{}", text);
                 if let Ok(raw) = serde_json::from_str::<Value>(&text) {
                     if let Some(echo) = raw.get("echo").and_then(|v| v.as_str()) {
-                        if let Some((_, sender)) = pending_requests.remove(echo) {
+                        if let Some((_, pending)) = pending_requests.remove(echo) {
                             log::debug!("Session resume: {}", echo);
                             match serde_json::from_value::<Response>(raw) {
-                                Ok(res) => _ = sender.send(res),
+                                Ok(res) => _ = pending.sender.send(res),
                                 Err(e) => log::warn!("resp parse error: {}", e),
                             }
                         } else {
@@ -117,12 +124,48 @@ async fn event_loop(ws: WsStream) -> Result<()> {
     let task_event_listener = tokio::spawn(async move {
         listener(pending_requests_cloned, ws_receiver).await;
     });
+
+    // 定期清理过期请求的任务
+    let pending_requests_cleanup = pending_requests.clone();
+    let cleanup_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let now = std::time::Instant::now();
+            let mut expired_keys = Vec::new();
+
+            for entry in pending_requests_cleanup.iter() {
+                if now.duration_since(entry.value().created_at) > Duration::from_secs(120) {
+                    expired_keys.push(entry.key().clone());
+                }
+            }
+
+            for key in expired_keys {
+                if let Some((_, expired_request)) = pending_requests_cleanup.remove(&key) {
+                    log::warn!("Request {} expired and removed", key);
+                    // 发送超时错误给等待的调用者
+                    let _ = expired_request.sender.send(Response {
+                        status: "timeout".to_string(),
+                        retcode: -1,
+                        data: Value::Null,
+                        message: Some("Request timeout".to_string()),
+                        echo: Some(key),
+                    });
+                }
+            }
+        }
+    });
+
     let task_sender = tokio::spawn(async move {
         while let Some(request) = req_rx.recv().await {
             log::debug!("request: {:?}", request.action);
             if let Ok(message_str) = serde_json::to_string(&request) {
                 let message = Message::from(message_str);
-                pending_requests.insert(request.echo.clone(), request.sender);
+                let pending = PendingRequest {
+                    sender: request.sender,
+                    created_at: request.created_at,
+                };
+                pending_requests.insert(request.echo.clone(), pending);
                 log::debug!("Session {} created", request.echo);
                 if let Err(e) = ws_sender.send(message).await {
                     log::error!("RequestTask: failed with error: {}", e);
@@ -148,6 +191,9 @@ async fn event_loop(ws: WsStream) -> Result<()> {
         }
         _ = task_sender => {
             log::info!("Sender task endded");
+        }
+        _ = cleanup_task => {
+            log::info!("Cleanup task endded");
         }
     }
     Ok(())

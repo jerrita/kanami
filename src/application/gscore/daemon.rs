@@ -82,10 +82,9 @@ async fn event_loop(
                         }
                     }
                     Some(Ok(WsMessage::Binary(data))) => {
-                        // 尝试将二进制数据转换为 UTF-8 字符串
-                        match String::from_utf8(data.to_vec()) {
+                        match std::str::from_utf8(&data) {
                             Ok(text) => {
-                                if let Err(e) = handle_gscore_message(&text).await {
+                                if let Err(e) = handle_gscore_message(text).await {
                                     log::error!("Failed to handle GSCore binary message: {}", e);
                                 }
                             }
@@ -125,10 +124,9 @@ async fn event_loop(
 
 /// 处理来自 GSCore 的消息
 async fn handle_gscore_message(text: &str) -> Result<()> {
-    log::debug!(
-        "Received from GSCore: {}...",
-        text.chars().take(400).collect::<String>()
-    );
+    let preview = if text.len() > 400 { &text[..400] } else { text };
+    log::debug!("Received from GSCore: {}...", preview);
+
     match serde_json::from_str::<MessageSend>(text) {
         Ok(msg_send) => {
             process_message_send(msg_send).await?;
@@ -149,31 +147,26 @@ async fn process_message_send(send: MessageSend) -> Result<()> {
         }
 
         let data: Message = content.into();
-        let forwards: Vec<Segment> = data
-            .clone()
-            .into_iter()
-            .flat_map(|segment| {
-                if let Segment::Node {
-                    id: _,
-                    user_id,
-                    nickname,
-                    content: Some(content),
-                } = segment
-                {
-                    content
-                        .into_iter()
-                        .map(|x| Segment::Node {
-                            id: None,
-                            user_id: user_id.clone(),
-                            nickname: nickname.clone(),
-                            content: Some(x.clone().into()),
-                        })
-                        .collect()
-                } else {
-                    vec![]
+
+        let mut forwards: Vec<Segment> = Vec::new();
+        for segment in &data {
+            if let Segment::Node {
+                user_id,
+                nickname,
+                content: Some(content),
+                ..
+            } = segment
+            {
+                for x in content {
+                    forwards.push(Segment::Node {
+                        id: None,
+                        user_id: user_id.clone(),
+                        nickname: nickname.clone(),
+                        content: Some(vec![x.clone()].into()),
+                    });
                 }
-            })
-            .collect();
+            }
+        }
 
         let target_type = match send.target_type.ok_or(anyhow!("no target_type"))? {
             TargetType::Group => "group",
@@ -181,7 +174,7 @@ async fn process_message_send(send: MessageSend) -> Result<()> {
         };
         let target: i64 = send.target_id.ok_or(anyhow!("no target_id"))?.parse()?;
 
-        if forwards.len() > 0 {
+        if !forwards.is_empty() {
             get_bot()
                 .await
                 .send_forward_msg(
