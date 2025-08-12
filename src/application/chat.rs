@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。";
+const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答将展示在纯文本环境中，没有markdown渲染支持，你需要基于此优化排版。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
