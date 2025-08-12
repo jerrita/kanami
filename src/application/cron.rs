@@ -16,7 +16,7 @@ pub struct CronApp {
 
 async fn send_prompt(content: &str) -> Result<()> {
     let bot = get_bot().await;
-    bot.send_group_message(config::MAIN_GROOUP, content).await?;
+    bot.send_group_message(config::MAIN_GROUP, content).await?;
     Ok(())
 }
 
@@ -42,6 +42,20 @@ impl Application for CronApp {
             .add(Job::new_async("0 0 0 * * 1", |_uuid, _l| {
                 Box::pin(async move {
                     if let Err(e) = send_prompt("周一啦！").await {
+                        log::error!("failed to send prompt: {}", e);
+                    }
+                })
+            })?)
+            .await?;
+
+        sched
+            .add(Job::new_async("0 0 21 * * *", |_uuid, _l| {
+                Box::pin(async move {
+                    if let Err(e) = get_bot()
+                        .await
+                        .send_private_message(config::USER_1, "晚上好！今天记得打卡哦~")
+                        .await
+                    {
                         log::error!("failed to send prompt: {}", e);
                     }
                 })
