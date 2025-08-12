@@ -12,10 +12,6 @@ impl super::Application for TemplateApp {
     fn name(&self) -> &str {
         "template"
     }
-    async fn on_load(&mut self) -> Result<()> {
-        log::info!("app <{}> loaded", self.name());
-        Ok(())
-    }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         todo!()

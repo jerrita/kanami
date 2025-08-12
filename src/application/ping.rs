@@ -15,11 +15,6 @@ impl super::Application for PingApp {
         "ping"
     }
 
-    async fn on_load(&mut self) -> Result<()> {
-        log::info!("app <{}> loaded", self.name());
-        Ok(())
-    }
-
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         match event.as_ref() {
             Event::MessageEvent(event) => {

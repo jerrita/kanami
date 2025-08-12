@@ -21,11 +21,6 @@ impl super::Application for CatApp {
         "cat"
     }
 
-    async fn on_load(&mut self) -> Result<()> {
-        log::info!("app <{}> loaded", self.name());
-        Ok(())
-    }
-
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(msg_event) = event.as_ref() {
             self.handle_message_event(msg_event).await?;
