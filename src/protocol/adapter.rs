@@ -28,7 +28,7 @@ pub(crate) struct PendingRequest {
 pub struct Response {
     status: String,
     retcode: i32,
-    pub data: Value,
+    pub data: Option<Value>,
     message: Option<String>,
     echo: Option<String>,
 }
@@ -153,7 +153,7 @@ async fn event_loop(ws: WsStream) -> Result<()> {
                     let _ = expired_request.sender.send(Response {
                         status: "timeout".to_string(),
                         retcode: -1,
-                        data: Value::Null,
+                        data: None,
                         message: Some("Request timeout".to_string()),
                         echo: Some(key),
                     });

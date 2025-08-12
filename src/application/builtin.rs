@@ -2,7 +2,7 @@ use crate::protocol::{
     event::{self, Event, MessageEvent},
     get_bot,
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use async_trait::async_trait;
 use std::{collections::HashMap, sync::Arc};
 
@@ -59,9 +59,9 @@ impl BuiltinApp {
             let res = bot.get_group_info(group_id, false).await?;
             let group_name = res
                 .data
-                .get("group_name")
-                .ok_or(anyhow!("failed get group info."))?
-                .as_str()
+                .as_ref()
+                .and_then(|d| d.get("group_name"))
+                .and_then(|v| v.as_str())
                 .unwrap_or("<unknown>")
                 .to_string();
             self.group_map.insert(group_id, group_name);
