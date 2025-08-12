@@ -10,12 +10,12 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::time::Instant;
+use tokio::sync::RwLock;
 
 use crate::{
     config,
     protocol::{
         event::{Event, MessageEvent},
-        get_bot,
         message::{Message, Segment},
     },
 };
@@ -55,6 +55,7 @@ pub struct ChatApp {
     client: Client,
     token: String,
     base_url: String,
+    current_model: RwLock<String>,
     history: DashMap<i64, Vec<ChatMessage>>,
     rate_limiter: DashMap<i64, Vec<Instant>>,
 }
@@ -94,11 +95,32 @@ impl super::Application for ChatApp {
                 None => (text_prompt.trim(), ""),
             };
 
-            if !matches!(cmd, "!ai" | "!aip") {
+            if !matches!(cmd, "!ai" | "!aip" | "!switch") {
                 return Ok(());
             }
 
             let user_id = event.user_id();
+
+            // Handle !switch command separately for OWNER only
+            if cmd == "!switch" {
+                if user_id != config::OWNER {
+                    return Ok(());
+                }
+                
+                if prompt.is_empty() {
+                    let current_model = self.current_model.read().await.clone();
+                    event.reply(format!("当前模型: {}，输入模型名称以切换", current_model), true).await?;
+                    return Ok(());
+                }
+                
+                {
+                    let mut model = self.current_model.write().await;
+                    *model = prompt.to_string();
+                }
+                
+                event.reply(format!("已切换模型为: {}", prompt), true).await?;
+                return Ok(());
+            }
 
             {
                 let now = Instant::now();
@@ -159,15 +181,6 @@ impl super::Application for ChatApp {
                 content: user_content,
             };
 
-            let thinking_res = event.reply("少女思考中...".to_string(), true).await?;
-            let thinking_msg_id = thinking_res
-                .data
-                .as_ref()
-                .and_then(|d| d.get("message_id"))
-                .and_then(|v| v.as_i64())
-                .map(|id| id as i32)
-                .ok_or_else(|| anyhow!("Failed to get message_id"))?;
-
             match cmd {
                 "!ai" => {
                     let mut messages = vec![ChatMessage {
@@ -207,8 +220,6 @@ impl super::Application for ChatApp {
                 }
                 _ => {}
             }
-
-            get_bot().await.delete_message(thinking_msg_id).await?;
         }
         Ok(())
     }
@@ -220,6 +231,7 @@ impl ChatApp {
             client: Client::new(),
             token: token.to_string(),
             base_url: base_url.to_string(),
+            current_model: RwLock::new("claude-sonnet-4".to_string()),
             history: DashMap::new(),
             rate_limiter: DashMap::new(),
         }
@@ -283,8 +295,10 @@ impl ChatApp {
     }
 
     async fn call_api(&self, messages: &[ChatMessage]) -> Result<ChatMessage> {
+        let current_model = self.current_model.read().await.clone();
+        
         let req = ChatRequest {
-            model: "gpt-4.1",
+            model: &current_model,
             messages,
         };
 
