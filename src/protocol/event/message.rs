@@ -172,6 +172,14 @@ impl MessageEvent {
     }
 
     #[allow(unused)]
+    pub fn message(&self) -> &Message {
+        match self {
+            MessageEvent::Group(x) => &x.message,
+            MessageEvent::Private(x) => &x.message,
+        }
+    }
+
+    #[allow(unused)]
     pub async fn reply<T>(&self, message: T, quote: bool) -> Result<Response>
     where
         T: Into<Message>,
