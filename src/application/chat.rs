@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose};
 use dashmap::DashMap;
+use log::{debug, error};
 use regex::Regex;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -18,7 +20,7 @@ use crate::{
     },
 };
 
-const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答将展示在纯文本环境中，没有markdown渲染支持，你需要基于此优化排版。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。";
+const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -72,15 +74,15 @@ impl super::Application for ChatApp {
             }
 
             let mut text_prompt = String::new();
-            let mut image_urls: Vec<String> = Vec::new();
+            let mut images_to_process: Vec<(String, String)> = Vec::new();
             for segment in event.message() {
                 match segment {
                     Segment::Text { text } => {
                         text_prompt.push_str(&text);
                     }
-                    Segment::Image { url, .. } => {
+                    Segment::Image { file, url, .. } => {
                         if let Some(url) = url {
-                            image_urls.push(url.clone());
+                            images_to_process.push((file.clone(), url.clone()));
                         }
                     }
                     _ => {}
@@ -113,21 +115,41 @@ impl super::Application for ChatApp {
                 requests.push(now);
             }
 
-            if prompt.is_empty() && image_urls.is_empty() {
+            if prompt.is_empty() && images_to_process.is_empty() {
                 return Ok(());
             }
 
-            let user_content = if image_urls.is_empty() {
+            let mut data_urls = Vec::new();
+            for (file_name, url) in images_to_process {
+                let response = self.client.get(&url).send().await?;
+                let image_bytes = response.bytes().await?;
+
+                let mime_type = match file_name.split('.').last() {
+                    Some("png") => "image/png",
+                    Some("jpg") | Some("jpeg") => "image/jpeg",
+                    Some("gif") => "image/gif",
+                    Some("webp") => "image/webp",
+                    _ => "application/octet-stream",
+                };
+
+                let encoded_image = general_purpose::STANDARD.encode(&image_bytes);
+                let data_url = format!("data:{};base64,{}", mime_type, encoded_image);
+                data_urls.push(data_url);
+            }
+
+            let user_content = if data_urls.is_empty() {
                 ChatContent::Text(prompt.to_string())
             } else {
                 let mut parts: Vec<serde_json::Value> = vec![json!({
                     "type": "text",
                     "text": prompt
                 })];
-                for url in image_urls {
+                for url in data_urls {
                     parts.push(json!({
                         "type": "image_url",
-                        "image_url": { "url": url }
+                        "image_url": {
+                            "url": url
+                        }
                     }));
                 }
                 ChatContent::Parts(parts)
@@ -266,15 +288,35 @@ impl ChatApp {
             messages,
         };
 
-        let res = self
+        let request_body_json_full = serde_json::to_string(&req).unwrap_or_else(|e| e.to_string());
+        let base64_re = Regex::new(r"data:image/[^;]+;base64,([a-zA-Z0-9+/=]{50,})").unwrap();
+        let sanitized_body = base64_re.replace_all(
+            &request_body_json_full,
+            "data:image/...;base64,<base64_data>",
+        );
+        debug!(">>> LLM Request: {} >>>", sanitized_body);
+
+        let response = self
             .client
             .post(format!("{}/v1/chat/completions", self.base_url))
             .bearer_auth(&self.token)
             .json(&req)
             .send()
-            .await?
-            .json::<ChatResponse>()
             .await?;
+
+        let response_text = response.text().await?;
+        debug!("<<< LLM Response: {} >>>", response_text);
+
+        let res: ChatResponse = match serde_json::from_str(&response_text) {
+            Ok(r) => r,
+            Err(e) => {
+                error!(
+                    "Failed to decode LLM response: {}. Response body: {}",
+                    e, response_text
+                );
+                return Err(anyhow!("Failed to decode LLM response"));
+            }
+        };
 
         res.choices
             .into_iter()
