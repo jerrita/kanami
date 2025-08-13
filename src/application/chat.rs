@@ -9,8 +9,8 @@ use regex::Regex;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::time::Instant;
 use tokio::sync::RwLock;
+use tokio::time::Instant;
 
 use crate::{
     config,
@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。";
+const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。你的回答为无代码块包裹的rst格式。不要使用粗体和斜体，除非你有充分的理由那么做。";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -106,19 +106,27 @@ impl super::Application for ChatApp {
                 if user_id != config::OWNER {
                     return Ok(());
                 }
-                
+
                 if prompt.is_empty() {
+                    // Show current model when no parameter is provided
                     let current_model = self.current_model.read().await.clone();
-                    event.reply(format!("当前模型: {}，输入模型名称以切换", current_model), true).await?;
+                    event
+                        .reply(
+                            format!("当前模型: {}，输入模型名称以切换", current_model),
+                            true,
+                        )
+                        .await?;
                     return Ok(());
                 }
-                
+
                 {
                     let mut model = self.current_model.write().await;
                     *model = prompt.to_string();
                 }
-                
-                event.reply(format!("已切换模型为: {}", prompt), true).await?;
+
+                event
+                    .reply(format!("已切换模型为: {}", prompt), true)
+                    .await?;
                 return Ok(());
             }
 
@@ -231,7 +239,7 @@ impl ChatApp {
             client: Client::new(),
             token: token.to_string(),
             base_url: base_url.to_string(),
-            current_model: RwLock::new("claude-sonnet-4".to_string()),
+            current_model: RwLock::new("gpt-4.1".to_string()),
             history: DashMap::new(),
             rate_limiter: DashMap::new(),
         }
@@ -296,7 +304,7 @@ impl ChatApp {
 
     async fn call_api(&self, messages: &[ChatMessage]) -> Result<ChatMessage> {
         let current_model = self.current_model.read().await.clone();
-        
+
         let req = ChatRequest {
             model: &current_model,
             messages,
