@@ -24,6 +24,7 @@ const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你
 const RATE_LIMIT_WINDOW: u64 = 60; // seconds
 const RATE_LIMIT_MAX: usize = 3;
 const HISTORY_MAX_LENGTH: usize = 6;
+const MAX_MESSAGE_LENGTH: usize = 2800;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -343,37 +344,90 @@ impl ChatApp {
         Self::send_reply(event, res_text).await
     }
 
-    async fn send_reply(event: &MessageEvent, text: String) -> Result<()> {
-        let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
-        let mut segments = Vec::new();
-        let mut last_end = 0;
+    fn split_text_by_length(text: &str, max_length: usize) -> Vec<String> {
+        if text.len() <= max_length {
+            return vec![text.to_string()];
+        }
 
-        for mat in url_re.find_iter(&text) {
-            if mat.start() > last_end {
-                let text_part = &text[last_end..mat.start()];
+        let mut chunks = Vec::new();
+        let mut start = 0;
+
+        while start < text.len() {
+            let end = if start + max_length >= text.len() {
+                text.len()
+            } else {
+                // Try to find a good breaking point (sentence, paragraph, or space)
+                let search_end = start + max_length;
+                let chunk = &text[start..search_end];
+                
+                // Look for sentence endings first
+                if let Some(pos) = chunk.rfind(&['.', '!', '?', '。', '！', '？'][..]) {
+                    start + pos + 1
+                } 
+                // Look for paragraph breaks
+                else if let Some(pos) = chunk.rfind('\n') {
+                    start + pos + 1
+                }
+                // Look for spaces
+                else if let Some(pos) = chunk.rfind(' ') {
+                    start + pos + 1
+                }
+                // If no good breaking point, just cut at max_length
+                else {
+                    search_end
+                }
+            };
+
+            chunks.push(text[start..end].trim().to_string());
+            start = end;
+        }
+
+        chunks.into_iter().filter(|s| !s.is_empty()).collect()
+    }
+
+    async fn send_reply(event: &MessageEvent, text: String) -> Result<()> {
+        // First, split the text into chunks if it's too long
+        let text_chunks = Self::split_text_by_length(&text, MAX_MESSAGE_LENGTH);
+        
+        for (index, chunk) in text_chunks.iter().enumerate() {
+            // For each chunk, process it for images and send
+            let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
+            let mut segments = Vec::new();
+            let mut last_end = 0;
+
+            for mat in url_re.find_iter(chunk) {
+                if mat.start() > last_end {
+                    let text_part = &chunk[last_end..mat.start()];
+                    segments.push(Segment::Text {
+                        text: text_part.to_string(),
+                    });
+                }
+
+                let url = mat.as_str().to_string();
+                segments.push(Segment::image(url));
+
+                last_end = mat.end();
+            }
+
+            if last_end < chunk.len() {
                 segments.push(Segment::Text {
-                    text: text_part.to_string(),
+                    text: chunk[last_end..].to_string(),
                 });
             }
 
-            let url = mat.as_str().to_string();
-            segments.push(Segment::image(url));
-
-            last_end = mat.end();
-        }
-
-        if last_end < text.len() {
-            segments.push(Segment::Text {
-                text: text[last_end..].to_string(),
-            });
-        }
-
-        if segments.is_empty() {
-            if !text.is_empty() {
-                event.reply(text, true).await?;
+            // Send the chunk
+            if segments.is_empty() {
+                if !chunk.is_empty() {
+                    event.reply(chunk.clone(), true).await?;
+                }
+            } else {
+                event.reply(Message::from(segments), true).await?;
             }
-        } else {
-            event.reply(Message::from(segments), true).await?;
+
+            // Add a small delay between messages to avoid rate limiting
+            if index < text_chunks.len() - 1 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
         }
 
         Ok(())
