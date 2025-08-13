@@ -21,6 +21,9 @@ use crate::{
 };
 
 const SYSTEM_PROMPT: &str = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。你的回答为无代码块包裹的rst格式。不要使用粗体和斜体，除非你有充分的理由那么做。";
+const RATE_LIMIT_WINDOW: u64 = 60; // seconds
+const RATE_LIMIT_MAX: usize = 3;
+const HISTORY_MAX_LENGTH: usize = 6;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -51,11 +54,35 @@ struct Choice {
     message: ChatMessage,
 }
 
+// Helper struct to reduce parameter passing
+struct ChatContext {
+    client: Client,
+    token: String,
+    base_url: String,
+    current_model: Arc<RwLock<String>>,
+}
+
+impl ChatContext {
+    fn new(
+        client: Client,
+        token: String,
+        base_url: String,
+        current_model: Arc<RwLock<String>>,
+    ) -> Self {
+        Self {
+            client,
+            token,
+            base_url,
+            current_model,
+        }
+    }
+}
+
 pub struct ChatApp {
     client: Client,
     token: String,
     base_url: String,
-    current_model: RwLock<String>,
+    current_model: Arc<RwLock<String>>,
     history: DashMap<i64, Vec<ChatMessage>>,
     rate_limiter: DashMap<i64, Vec<Instant>>,
 }
@@ -67,6 +94,34 @@ impl super::Application for ChatApp {
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
+        // Create context for concurrent processing
+        let context = ChatContext::new(
+            self.client.clone(),
+            self.token.clone(),
+            self.base_url.clone(),
+            Arc::clone(&self.current_model),
+        );
+        let history = self.history.clone();
+        let rate_limiter = self.rate_limiter.clone();
+
+        // Spawn a task for concurrent processing
+        tokio::spawn(async move {
+            if let Err(e) = Self::handle_event_impl(context, history, rate_limiter, event).await {
+                log::error!("Error handling chat event: {}", e);
+            }
+        });
+
+        Ok(())
+    }
+}
+
+impl ChatApp {
+    async fn handle_event_impl(
+        context: ChatContext,
+        history: DashMap<i64, Vec<ChatMessage>>,
+        rate_limiter: DashMap<i64, Vec<Instant>>,
+        event: Arc<Event>,
+    ) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
             if let MessageEvent::Group(g) = event {
                 if !config::WHITE_GROUPS.contains(&g.group_id) {
@@ -74,26 +129,9 @@ impl super::Application for ChatApp {
                 }
             }
 
-            let mut text_prompt = String::new();
-            let mut images_to_process: Vec<(String, String)> = Vec::new();
-            for segment in event.message() {
-                match segment {
-                    Segment::Text { text } => {
-                        text_prompt.push_str(&text);
-                    }
-                    Segment::Image { file, url, .. } => {
-                        if let Some(url) = url {
-                            images_to_process.push((file.clone(), url.clone()));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            let (cmd, prompt) = match text_prompt.trim().split_once(' ') {
-                Some((cmd, prompt)) => (cmd, prompt.trim()),
-                None => (text_prompt.trim(), ""),
-            };
+            let (text_prompt, images_to_process) =
+                Self::extract_text_and_images(event.message().segments());
+            let (cmd, prompt) = Self::parse_command(&text_prompt);
 
             if !matches!(cmd, "!ai" | "!aip" | "!switch") {
                 return Ok(());
@@ -109,7 +147,7 @@ impl super::Application for ChatApp {
 
                 if prompt.is_empty() {
                     // Show current model when no parameter is provided
-                    let current_model = self.current_model.read().await.clone();
+                    let current_model = context.current_model.read().await.clone();
                     event
                         .reply(
                             format!("当前模型: {}，输入模型名称以切换", current_model),
@@ -120,7 +158,7 @@ impl super::Application for ChatApp {
                 }
 
                 {
-                    let mut model = self.current_model.write().await;
+                    let mut model = context.current_model.write().await;
                     *model = prompt.to_string();
                 }
 
@@ -130,19 +168,10 @@ impl super::Application for ChatApp {
                 return Ok(());
             }
 
-            {
-                let now = Instant::now();
-                let mut requests = self.rate_limiter.entry(user_id).or_default();
-                requests.retain(|&t| now.duration_since(t).as_secs() < 60);
-
-                if requests.len() >= 3 {
-                    event
-                        .reply("你问得太快了，休息一下吧~".to_string(), true)
-                        .await?;
-                    return Ok(());
-                }
-
-                requests.push(now);
+            // Check rate limit
+            if let Err(msg) = Self::check_rate_limit(&rate_limiter, user_id).await {
+                event.reply(msg, true).await?;
+                return Ok(());
             }
 
             if prompt.is_empty() && images_to_process.is_empty() {
@@ -151,39 +180,15 @@ impl super::Application for ChatApp {
 
             let mut data_urls = Vec::new();
             for (file_name, url) in images_to_process {
-                let response = self.client.get(&url).send().await?;
+                let response = context.client.get(&url).send().await?;
                 let image_bytes = response.bytes().await?;
-
-                let mime_type = match file_name.split('.').last() {
-                    Some("png") => "image/png",
-                    Some("jpg") | Some("jpeg") => "image/jpeg",
-                    Some("gif") => "image/gif",
-                    Some("webp") => "image/webp",
-                    _ => "application/octet-stream",
-                };
-
+                let mime_type = Self::get_mime_type(&file_name);
                 let encoded_image = general_purpose::STANDARD.encode(&image_bytes);
                 let data_url = format!("data:{};base64,{}", mime_type, encoded_image);
                 data_urls.push(data_url);
             }
 
-            let user_content = if data_urls.is_empty() {
-                ChatContent::Text(prompt.to_string())
-            } else {
-                let mut parts: Vec<serde_json::Value> = vec![json!({
-                    "type": "text",
-                    "text": prompt
-                })];
-                for url in data_urls {
-                    parts.push(json!({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": url
-                        }
-                    }));
-                }
-                ChatContent::Parts(parts)
-            };
+            let user_content = Self::create_user_content(prompt, data_urls);
             let user_message = ChatMessage {
                 role: "user".to_string(),
                 content: user_content,
@@ -191,29 +196,20 @@ impl super::Application for ChatApp {
 
             match cmd {
                 "!ai" => {
-                    let mut messages = vec![ChatMessage {
-                        role: "system".to_string(),
-                        content: ChatContent::Text(SYSTEM_PROMPT.to_string()),
-                    }];
+                    let mut messages = vec![Self::create_system_message()];
                     messages.push(user_message);
-                    self.execute_chat_and_reply(event, &mut messages).await?;
-                    self.history.insert(user_id, messages);
+                    Self::execute_chat_and_reply(&context, event, &mut messages).await?;
+                    history.insert(user_id, messages);
                 }
                 "!aip" => {
-                    let mut history = self.history.entry(user_id).or_default();
-                    if history.is_empty() {
-                        history.push(ChatMessage {
-                            role: "system".to_string(),
-                            content: ChatContent::Text(SYSTEM_PROMPT.to_string()),
-                        });
+                    let mut hist = history.entry(user_id).or_default();
+                    if hist.is_empty() {
+                        hist.push(Self::create_system_message());
                     }
-                    if history.len() >= 6 {
-                        let summary = self.summarize_history(&history).await?;
-                        *history = vec![
-                            ChatMessage {
-                                role: "system".to_string(),
-                                content: ChatContent::Text(SYSTEM_PROMPT.to_string()),
-                            },
+                    if hist.len() >= HISTORY_MAX_LENGTH {
+                        let summary = Self::summarize_history(&context, &hist).await?;
+                        *hist = vec![
+                            Self::create_system_message(),
                             ChatMessage {
                                 role: "system".to_string(),
                                 content: ChatContent::Text(format!(
@@ -223,8 +219,8 @@ impl super::Application for ChatApp {
                             },
                         ];
                     }
-                    history.push(user_message);
-                    self.execute_chat_and_reply(event, &mut history).await?;
+                    hist.push(user_message);
+                    Self::execute_chat_and_reply(&context, event, &mut hist).await?;
                 }
                 _ => {}
             }
@@ -239,18 +235,99 @@ impl ChatApp {
             client: Client::new(),
             token: token.to_string(),
             base_url: base_url.to_string(),
-            current_model: RwLock::new("gpt-4.1".to_string()),
+            current_model: Arc::new(RwLock::new("gpt-4.1".to_string())),
             history: DashMap::new(),
             rate_limiter: DashMap::new(),
         }
     }
 
+    fn create_system_message() -> ChatMessage {
+        ChatMessage {
+            role: "system".to_string(),
+            content: ChatContent::Text(SYSTEM_PROMPT.to_string()),
+        }
+    }
+
+    fn extract_text_and_images(segments: &[Segment]) -> (String, Vec<(String, String)>) {
+        let mut text_prompt = String::new();
+        let mut images_to_process = Vec::new();
+
+        for segment in segments {
+            match segment {
+                Segment::Text { text } => {
+                    text_prompt.push_str(text);
+                }
+                Segment::Image { file, url, .. } => {
+                    if let Some(url) = url {
+                        images_to_process.push((file.clone(), url.clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (text_prompt, images_to_process)
+    }
+
+    fn parse_command(text: &str) -> (&str, &str) {
+        match text.trim().split_once(' ') {
+            Some((cmd, prompt)) => (cmd, prompt.trim()),
+            None => (text.trim(), ""),
+        }
+    }
+
+    fn get_mime_type(file_name: &str) -> &'static str {
+        match file_name.split('.').last() {
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("gif") => "image/gif",
+            Some("webp") => "image/webp",
+            _ => "application/octet-stream",
+        }
+    }
+
+    async fn check_rate_limit(
+        rate_limiter: &DashMap<i64, Vec<Instant>>,
+        user_id: i64,
+    ) -> Result<(), String> {
+        let now = Instant::now();
+        let mut requests = rate_limiter.entry(user_id).or_default();
+        requests.retain(|&t| now.duration_since(t).as_secs() < RATE_LIMIT_WINDOW);
+
+        if requests.len() >= RATE_LIMIT_MAX {
+            return Err("你问得太快了，休息一下吧~".to_string());
+        }
+
+        requests.push(now);
+        Ok(())
+    }
+
+    fn create_user_content(prompt: &str, data_urls: Vec<String>) -> ChatContent {
+        if data_urls.is_empty() {
+            ChatContent::Text(prompt.to_string())
+        } else {
+            let mut parts: Vec<serde_json::Value> = vec![json!({
+                "type": "text",
+                "text": prompt
+            })];
+            for url in data_urls {
+                parts.push(json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": url
+                    }
+                }));
+            }
+            ChatContent::Parts(parts)
+        }
+    }
+
     async fn execute_chat_and_reply(
-        &self,
+        context: &ChatContext,
         event: &MessageEvent,
         messages: &mut Vec<ChatMessage>,
     ) -> Result<()> {
-        let res = self.call_api(messages).await?;
+        let res = Self::call_api(context, messages).await?;
         let res_text = match res.content {
             ChatContent::Text(text) => text,
             ChatContent::Parts(_) => {
@@ -263,10 +340,10 @@ impl ChatApp {
             content: ChatContent::Text(res_text.clone()),
         });
 
-        self.send_reply(event, res_text).await
+        Self::send_reply(event, res_text).await
     }
 
-    async fn send_reply(&self, event: &MessageEvent, text: String) -> Result<()> {
+    async fn send_reply(event: &MessageEvent, text: String) -> Result<()> {
         let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
         let mut segments = Vec::new();
         let mut last_end = 0;
@@ -302,8 +379,8 @@ impl ChatApp {
         Ok(())
     }
 
-    async fn call_api(&self, messages: &[ChatMessage]) -> Result<ChatMessage> {
-        let current_model = self.current_model.read().await.clone();
+    async fn call_api(context: &ChatContext, messages: &[ChatMessage]) -> Result<ChatMessage> {
+        let current_model = context.current_model.read().await.clone();
 
         let req = ChatRequest {
             model: &current_model,
@@ -318,10 +395,10 @@ impl ChatApp {
         );
         debug!(">>> LLM Request: {} >>>", sanitized_body);
 
-        let response = self
+        let response = context
             .client
-            .post(format!("{}/v1/chat/completions", self.base_url))
-            .bearer_auth(&self.token)
+            .post(format!("{}/v1/chat/completions", context.base_url))
+            .bearer_auth(&context.token)
             .json(&req)
             .send()
             .await?;
@@ -347,7 +424,7 @@ impl ChatApp {
             .ok_or_else(|| anyhow!("API response is empty"))
     }
 
-    async fn summarize_history(&self, messages: &[ChatMessage]) -> Result<String> {
+    async fn summarize_history(context: &ChatContext, messages: &[ChatMessage]) -> Result<String> {
         let mut summary_messages = vec![ChatMessage {
             role: "system".to_string(),
             content: ChatContent::Text(
@@ -356,7 +433,7 @@ impl ChatApp {
         }];
         summary_messages.extend_from_slice(messages);
 
-        let res = self.call_api(&summary_messages).await?;
+        let res = Self::call_api(context, &summary_messages).await?;
         match res.content {
             ChatContent::Text(text) => Ok(text),
             _ => Err(anyhow!("Unsupported summary response from API")),
