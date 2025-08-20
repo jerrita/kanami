@@ -84,8 +84,8 @@ pub struct ChatApp {
     token: String,
     base_url: String,
     current_model: Arc<RwLock<String>>,
-    history: DashMap<i64, Vec<ChatMessage>>,
-    rate_limiter: DashMap<i64, Vec<Instant>>,
+    history: Arc<DashMap<i64, Vec<ChatMessage>>>,
+    rate_limiter: Arc<DashMap<i64, Vec<Instant>>>,
 }
 
 #[async_trait]
@@ -102,8 +102,8 @@ impl super::Application for ChatApp {
             self.base_url.clone(),
             Arc::clone(&self.current_model),
         );
-        let history = self.history.clone();
-        let rate_limiter = self.rate_limiter.clone();
+        let history = Arc::clone(&self.history);
+        let rate_limiter = Arc::clone(&self.rate_limiter);
 
         // Spawn a task for concurrent processing
         tokio::spawn(async move {
@@ -119,8 +119,8 @@ impl super::Application for ChatApp {
 impl ChatApp {
     async fn handle_event_impl(
         context: ChatContext,
-        history: DashMap<i64, Vec<ChatMessage>>,
-        rate_limiter: DashMap<i64, Vec<Instant>>,
+        history: Arc<DashMap<i64, Vec<ChatMessage>>>,
+        rate_limiter: Arc<DashMap<i64, Vec<Instant>>>,
         event: Arc<Event>,
     ) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
@@ -137,6 +137,14 @@ impl ChatApp {
             if !matches!(cmd, "!ai" | "!aip" | "!switch") {
                 return Ok(());
             }
+
+            debug!(
+                "Message received - user_id: {}, command: '{}', prompt: '{}', images: {}",
+                event.user_id(),
+                cmd,
+                prompt,
+                images_to_process.len()
+            );
 
             let user_id = event.user_id();
 
@@ -204,11 +212,23 @@ impl ChatApp {
                 }
                 "!aip" => {
                     let mut hist = history.entry(user_id).or_default();
+                    debug!(
+                        "!aip command - user_id: {}, current history length: {}",
+                        user_id,
+                        hist.len()
+                    );
                     if hist.is_empty() {
                         hist.push(Self::create_system_message());
+                        debug!("!aip - initialized empty history with system message");
                     }
                     if hist.len() >= HISTORY_MAX_LENGTH {
+                        debug!(
+                            "!aip - history length ({}) >= max length ({}), summarizing history",
+                            hist.len(),
+                            HISTORY_MAX_LENGTH
+                        );
                         let summary = Self::summarize_history(&context, &hist).await?;
+                        debug!("!aip - generated summary: {}", summary);
                         *hist = vec![
                             Self::create_system_message(),
                             ChatMessage {
@@ -219,9 +239,21 @@ impl ChatApp {
                                 )),
                             },
                         ];
+                        debug!(
+                            "!aip - reset history with summary, new length: {}",
+                            hist.len()
+                        );
                     }
                     hist.push(user_message);
+                    debug!(
+                        "!aip - added user message, history length now: {}",
+                        hist.len()
+                    );
                     Self::execute_chat_and_reply(&context, event, &mut hist).await?;
+                    debug!(
+                        "!aip - after AI response, final history length: {}",
+                        hist.len()
+                    );
                 }
                 _ => {}
             }
@@ -237,8 +269,8 @@ impl ChatApp {
             token: token.to_string(),
             base_url: base_url.to_string(),
             current_model: Arc::new(RwLock::new("gemini-2.5-flash".to_string())),
-            history: DashMap::new(),
-            rate_limiter: DashMap::new(),
+            history: Arc::new(DashMap::new()),
+            rate_limiter: Arc::new(DashMap::new()),
         }
     }
 
@@ -288,14 +320,21 @@ impl ChatApp {
     }
 
     async fn check_rate_limit(
-        rate_limiter: &DashMap<i64, Vec<Instant>>,
+        rate_limiter: &Arc<DashMap<i64, Vec<Instant>>>,
         user_id: i64,
     ) -> Result<(), String> {
         let now = Instant::now();
         let mut requests = rate_limiter.entry(user_id).or_default();
         requests.retain(|&t| now.duration_since(t).as_secs() < RATE_LIMIT_WINDOW);
 
+        debug!(
+            "Rate limit check - user_id: {}, current requests in window: {}",
+            user_id,
+            requests.len()
+        );
+
         if requests.len() >= RATE_LIMIT_MAX {
+            debug!("Rate limit exceeded for user_id: {}", user_id);
             return Err("你问得太快了，休息一下吧~".to_string());
         }
 
@@ -328,6 +367,10 @@ impl ChatApp {
         event: &MessageEvent,
         messages: &mut Vec<ChatMessage>,
     ) -> Result<()> {
+        debug!(
+            "execute_chat_and_reply - input messages count: {}",
+            messages.len()
+        );
         let res = Self::call_api(context, messages).await?;
         let res_text = match res.content {
             ChatContent::Text(text) => text,
@@ -340,6 +383,10 @@ impl ChatApp {
             role: res.role,
             content: ChatContent::Text(res_text.clone()),
         });
+        debug!(
+            "execute_chat_and_reply - after adding AI response, messages count: {}",
+            messages.len()
+        );
 
         Self::send_reply(event, res_text).await
     }
