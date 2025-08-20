@@ -49,7 +49,7 @@ impl Application for CronApp {
             .await?;
 
         sched
-            .add(Job::new_async("0 0 21 * * *", |_uuid, _l| {
+            .add(Job::new_async("0 0 13 * * *", |_uuid, _l| {
                 Box::pin(async move {
                     if let Err(e) = get_bot()
                         .await
