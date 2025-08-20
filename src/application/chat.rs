@@ -236,7 +236,7 @@ impl ChatApp {
             client: Client::new(),
             token: token.to_string(),
             base_url: base_url.to_string(),
-            current_model: Arc::new(RwLock::new("gpt-4.1".to_string())),
+            current_model: Arc::new(RwLock::new("gemini-2.5-flash".to_string())),
             history: DashMap::new(),
             rate_limiter: DashMap::new(),
         }
@@ -344,51 +344,35 @@ impl ChatApp {
         Self::send_reply(event, res_text).await
     }
 
-    fn split_text_by_length(text: &str, max_length: usize) -> Vec<String> {
-        if text.len() <= max_length {
-            return vec![text.to_string()];
+    pub fn split_text_by_length(text: &str, max_length: usize) -> Vec<String> {
+        if max_length == 0 {
+            return vec![];
         }
 
-        let mut chunks = Vec::new();
-        let mut start = 0;
+        let mut result = Vec::new();
+        let mut current_start = 0;
+        let mut last_char_end = 0;
 
-        while start < text.len() {
-            let end = if start + max_length >= text.len() {
-                text.len()
-            } else {
-                // Try to find a good breaking point (sentence, paragraph, or space)
-                let search_end = start + max_length;
-                let chunk = &text[start..search_end];
-                
-                // Look for sentence endings first
-                if let Some(pos) = chunk.rfind(&['.', '!', '?', '。', '！', '？'][..]) {
-                    start + pos + 1
-                } 
-                // Look for paragraph breaks
-                else if let Some(pos) = chunk.rfind('\n') {
-                    start + pos + 1
-                }
-                // Look for spaces
-                else if let Some(pos) = chunk.rfind(' ') {
-                    start + pos + 1
-                }
-                // If no good breaking point, just cut at max_length
-                else {
-                    search_end
-                }
-            };
-
-            chunks.push(text[start..end].trim().to_string());
-            start = end;
+        for (i, ch) in text.char_indices() {
+            let char_end = i + ch.len_utf8();
+            if char_end - current_start > max_length {
+                result.push(text[current_start..last_char_end].to_string());
+                current_start = last_char_end;
+            }
+            last_char_end = char_end;
         }
 
-        chunks.into_iter().filter(|s| !s.is_empty()).collect()
+        if current_start < text.len() {
+            result.push(text[current_start..].to_string());
+        }
+
+        result
     }
 
     async fn send_reply(event: &MessageEvent, text: String) -> Result<()> {
         // First, split the text into chunks if it's too long
         let text_chunks = Self::split_text_by_length(&text, MAX_MESSAGE_LENGTH);
-        
+
         for (index, chunk) in text_chunks.iter().enumerate() {
             // For each chunk, process it for images and send
             let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
