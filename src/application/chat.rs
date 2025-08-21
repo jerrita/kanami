@@ -16,6 +16,7 @@ use crate::{
     config,
     protocol::{
         event::{Event, MessageEvent},
+        get_bot,
         message::{Message, Segment},
     },
 };
@@ -130,10 +131,24 @@ impl ChatApp {
                 }
             }
 
-            let (text_prompt, images_to_process) =
-                Self::extract_text_and_images(event.message().segments());
-            let (cmd, prompt) = Self::parse_command(&text_prompt);
+            let segments = event.message().segments();
+            let (mut text_prompt, mut images_to_process) = Self::extract_text_and_images(segments);
 
+            // rework if msg contains reply
+            if !segments.is_empty() {
+                if let Segment::Reply { id } = &segments[0] {
+                    let bot = get_bot().await;
+                    if let Some(data) = bot.get_message(id.parse()?).await?.data {
+                        let msg: Vec<Segment> =
+                            serde_json::from_value(data.get("message").unwrap().clone())?;
+                        let (a, mut b) = Self::extract_text_and_images(&msg);
+                        text_prompt.push_str(&a);
+                        images_to_process.append(&mut b);
+                    }
+                }
+            }
+
+            let (cmd, prompt) = Self::parse_command(&text_prompt);
             if !matches!(cmd, "!ai" | "!aip" | "!switch") {
                 return Ok(());
             }
