@@ -46,7 +46,7 @@ impl CatApp {
         let count = raw_message.matches('喵').count();
 
         if count > 0 {
-            let limit = count.min(5);
+            let limit = count.min(3);
             let img_urls = self.fetch_cat_images(limit).await?;
 
             // Take only the number of images requested (up to count)

@@ -22,14 +22,16 @@ pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>) {
             Ok(ws) => {
                 retry = 0;
                 if let Err(e) = event_loop(ws, &mut receiver).await {
-                    log::error!("GSCore event loop error: {}", e);
+                    log::warn!("GSCore event loop error: {}", e);
                 }
             }
             Err(e) => {
                 log::warn!("GSCore connection error: {}", e);
             }
         }
-        log::info!("GSCore reconnecting after 3s. times: {}", retry);
+        if retry > 0 {
+            log::info!("GSCore reconnecting after 3s. attempts: {}", retry);
+        }
         tokio::time::sleep(Duration::from_secs(3)).await;
         retry += 1;
     }
@@ -67,8 +69,8 @@ async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>)
                         }
                     }
                     None => {
-                        log::info!("Receiver channel closed");
-                        return Ok(());
+                        log::info!("Receiver channel closed, will reconnect");
+                        return Err(anyhow!("Receiver channel closed"));
                     }
                 }
             }
@@ -124,7 +126,15 @@ async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>)
 /// 处理来自 GSCore 的消息
 async fn handle_gscore_message(text: &str) -> Result<()> {
     let msg_size = text.len();
-    let preview = if text.len() > 400 { &text[..400] } else { text };
+    let preview = if text.len() > 400 {
+        // 安全地在字符边界处截断
+        text.char_indices()
+            .nth(400)
+            .map(|(i, _)| &text[..i])
+            .unwrap_or(text)
+    } else {
+        text
+    };
     log::debug!("Received from GSCore: {}...", preview);
 
     let msg_send = match serde_json::from_str::<MessageSend>(text) {

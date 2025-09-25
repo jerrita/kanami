@@ -283,7 +283,7 @@ impl ChatApp {
             client: Client::new(),
             token: token.to_string(),
             base_url: base_url.to_string(),
-            current_model: Arc::new(RwLock::new("gemini-2.5-flash".to_string())),
+            current_model: Arc::new(RwLock::new("claude-sonnet-4-20250514".to_string())),
             history: Arc::new(DashMap::new()),
             rate_limiter: Arc::new(DashMap::new()),
         }
