@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     application::{
         builtin::BuiltinApp, cat::CatApp, chat::ChatApp, cron::CronApp, gscore::GSCoreAdapter,
-        ping::PingApp,
+        muri::MuriApp, ping::PingApp,
     },
     config,
     protocol::event::Event,
@@ -17,6 +17,7 @@ mod builtin;
 mod cat;
 mod chat;
 mod gscore;
+mod muri;
 mod ping;
 
 pub mod cron;
@@ -38,7 +39,7 @@ fn create_app(app: Box<dyn Application>) -> AppType {
 }
 
 lazy_static! {
-    pub static ref APPS: [AppType; 6] = [
+    pub static ref APPS: Vec<AppType> = vec![
         create_app(Box::new(BuiltinApp::new())),
         create_app(Box::new(PingApp::new())),
         create_app(Box::new(GSCoreAdapter::new())),
@@ -47,6 +48,7 @@ lazy_static! {
         create_app(Box::new(ChatApp::new(
             config::OPENAI_TOKEN,
             config::OPENAI_BASE
-        )))
+        ))),
+        create_app(Box::new(MuriApp::new()))
     ];
 }
