@@ -51,3 +51,6 @@ schedule = "0 0 13 * * *"
 content = "晚上好！今天记得打卡哦~"
 target = { type = "private", id = 1145141919810 }
 
+[muri]
+white_groups = [1145141919810]
+

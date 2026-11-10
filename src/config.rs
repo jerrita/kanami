@@ -3,7 +3,7 @@ use std::{env, fs, path::PathBuf, sync::OnceLock};
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 
-use crate::application::{builtin, cat, chat, cron, gscore, ping};
+use crate::application::{builtin, cat, chat, cron, gscore, muri, ping};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -18,6 +18,7 @@ pub struct Config {
     pub cat: Option<cat::Config>,
     pub cron: Option<cron::Config>,
     pub chat: Option<chat::Config>,
+    pub muri: Option<muri::Config>,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();

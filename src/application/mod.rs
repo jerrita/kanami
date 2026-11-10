@@ -17,7 +17,7 @@ pub(crate) mod builtin;
 pub(crate) mod cat;
 pub(crate) mod chat;
 pub(crate) mod gscore;
-mod muri;
+pub(crate) mod muri;
 pub(crate) mod ping;
 
 pub mod cron;
@@ -62,7 +62,9 @@ lazy_static! {
         if let Some(config) = &config.chat {
             apps.push(create_app(Box::new(ChatApp::new(config))));
         }
-        apps.push(create_app(Box::new(MuriApp::new())));
+        if let Some(config) = &config.muri {
+            apps.push(create_app(Box::new(MuriApp::new(config))));
+        }
         apps
     };
 }
