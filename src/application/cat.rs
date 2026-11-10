@@ -35,11 +35,11 @@ impl CatApp {
     }
 
     async fn handle_message_event(&self, event: &MessageEvent) -> Result<()> {
-        if let MessageEvent::Group(event) = event {
-            if !config::get().white_groups.contains(&event.group_id) {
-                // white list mode
-                return Ok(());
-            }
+        if let MessageEvent::Group(event) = event
+            && !config::get().white_groups.contains(&event.group_id)
+        {
+            // white list mode
+            return Ok(());
         }
 
         let raw_message = event.raw_message();
@@ -53,7 +53,7 @@ impl CatApp {
             let images_to_send: Vec<Segment> = img_urls
                 .into_iter()
                 .take(count)
-                .map(|url| Segment::image(url))
+                .map(Segment::image)
                 .collect();
 
             if !images_to_send.is_empty() {

@@ -24,6 +24,8 @@ pub mod cron;
 
 type AppType = Arc<Mutex<Box<dyn Application>>>;
 
+// async_trait adds #[must_use] to methods returning an already must-use Future.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Application: Send + Sync {
     fn name(&self) -> &str;

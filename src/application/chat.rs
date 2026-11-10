@@ -125,26 +125,24 @@ impl ChatApp {
         event: Arc<Event>,
     ) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
-            if let MessageEvent::Group(g) = event {
-                if !config::get().white_groups.contains(&g.group_id) {
-                    return Ok(());
-                }
+            if let MessageEvent::Group(g) = event
+                && !config::get().white_groups.contains(&g.group_id)
+            {
+                return Ok(());
             }
 
             let segments = event.message().segments();
             let (mut text_prompt, mut images_to_process) = Self::extract_text_and_images(segments);
 
             // rework if msg contains reply
-            if !segments.is_empty() {
-                if let Segment::Reply { id } = &segments[0] {
-                    let bot = get_bot().await;
-                    if let Some(data) = bot.get_message(id.parse()?).await?.data {
-                        let msg: Vec<Segment> =
-                            serde_json::from_value(data.get("message").unwrap().clone())?;
-                        let (a, mut b) = Self::extract_text_and_images(&msg);
-                        text_prompt.push_str(&a);
-                        images_to_process.append(&mut b);
-                    }
+            if let Some(Segment::Reply { id }) = segments.first() {
+                let bot = get_bot().await;
+                if let Some(data) = bot.get_message(id.parse()?).await?.data {
+                    let msg: Vec<Segment> =
+                        serde_json::from_value(data.get("message").unwrap().clone())?;
+                    let (a, mut b) = Self::extract_text_and_images(&msg);
+                    text_prompt.push_str(&a);
+                    images_to_process.append(&mut b);
                 }
             }
 
@@ -305,10 +303,12 @@ impl ChatApp {
                 Segment::Text { text } => {
                     text_prompt.push_str(text);
                 }
-                Segment::Image { file, url, .. } => {
-                    if let Some(url) = url {
-                        images_to_process.push((file.clone(), url.clone()));
-                    }
+                Segment::Image {
+                    file,
+                    url: Some(url),
+                    ..
+                } => {
+                    images_to_process.push((file.clone(), url.clone()));
                 }
                 _ => {}
             }
@@ -325,7 +325,7 @@ impl ChatApp {
     }
 
     fn get_mime_type(file_name: &str) -> &'static str {
-        match file_name.split('.').last() {
+        match file_name.split('.').next_back() {
             Some("png") => "image/png",
             Some("jpg") | Some("jpeg") => "image/jpeg",
             Some("gif") => "image/gif",
@@ -435,9 +435,9 @@ impl ChatApp {
         // First, split the text into chunks if it's too long
         let text_chunks = Self::split_text_by_length(&text, MAX_MESSAGE_LENGTH);
 
+        let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
         for (index, chunk) in text_chunks.iter().enumerate() {
             // For each chunk, process it for images and send
-            let url_re = Regex::new(r"(https?://[\S]+\.(?:png|jpg|jpeg|gif|webp))").unwrap();
             let mut segments = Vec::new();
             let mut last_end = 0;
 
