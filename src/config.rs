@@ -3,7 +3,7 @@ use std::{env, fs, path::PathBuf, sync::OnceLock};
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 
-use crate::application::{builtin, cat, cron, gscore, ping};
+use crate::application::{builtin, cat, chat, cron, gscore, ping};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -12,14 +12,12 @@ pub struct Config {
     pub token: String,
     pub owner: i64,
     pub main_group: i64,
-    pub white_groups: Vec<i64>,
-    pub openai_token: String,
-    pub openai_base: String,
     pub builtin: Option<builtin::Config>,
     pub ping: Option<ping::Config>,
     pub gscore: Option<gscore::Config>,
     pub cat: Option<cat::Config>,
     pub cron: Option<cron::Config>,
+    pub chat: Option<chat::Config>,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();

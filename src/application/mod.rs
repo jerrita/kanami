@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 pub(crate) mod builtin;
 pub(crate) mod cat;
-mod chat;
+pub(crate) mod chat;
 pub(crate) mod gscore;
 mod muri;
 pub(crate) mod ping;
@@ -59,10 +59,9 @@ lazy_static! {
         if let Some(config) = &config.cron {
             apps.push(create_app(Box::new(CronApp::new(config))));
         }
-        apps.push(create_app(Box::new(ChatApp::new(
-            config.openai_token.as_str(),
-            config.openai_base.as_str(),
-        ))));
+        if let Some(config) = &config.chat {
+            apps.push(create_app(Box::new(ChatApp::new(config))));
+        }
         apps.push(create_app(Box::new(MuriApp::new())));
         apps
     };
