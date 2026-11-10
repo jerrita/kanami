@@ -18,7 +18,7 @@ impl super::Application for PingApp {
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         match event.as_ref() {
             Event::MessageEvent(event) => {
-                if event.user_id() == config::OWNER && event.raw_message() == "ping" {
+                if event.user_id() == config::get().owner && event.raw_message() == "ping" {
                     event.reply("pong", true).await?;
                 }
                 if event.raw_message() == "!perf" {

@@ -46,8 +46,8 @@ lazy_static! {
         create_app(Box::new(CatApp::new())),
         create_app(Box::new(CronApp::new())),
         create_app(Box::new(ChatApp::new(
-            config::OPENAI_TOKEN,
-            config::OPENAI_BASE
+            config::get().openai_token.as_str(),
+            config::get().openai_base.as_str()
         ))),
         create_app(Box::new(MuriApp::new()))
     ];

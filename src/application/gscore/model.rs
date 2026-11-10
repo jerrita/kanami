@@ -78,7 +78,7 @@ impl From<&MessageEvent> for MessageReceive {
     fn from(value: &MessageEvent) -> Self {
         match value {
             MessageEvent::Group(event) => Self {
-                bot_id: config::GSCORE_BOTID.to_string(),
+                bot_id: config::get().gscore_botid.to_string(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Group,
@@ -99,7 +99,7 @@ impl From<&MessageEvent> for MessageReceive {
                 content: (&event.message).into(),
             },
             MessageEvent::Private(event) => Self {
-                bot_id: config::GSCORE_BOTID.to_string(),
+                bot_id: config::get().gscore_botid.to_string(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Direct,
@@ -155,8 +155,8 @@ impl From<&GSCoreMessage> for Segment {
             GSCoreMessage::Reply(id) => Segment::Reply { id: id.clone() },
             GSCoreMessage::Node(node) => Segment::Node {
                 id: None,
-                user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
-                nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                user_id: Some(config::get().gscore_node_sender_id.to_string()),
+                nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
                 content: Some(
                     node.iter()
                         .map(|seg| seg.into())
@@ -188,8 +188,8 @@ impl From<GSCoreMessage> for Segment {
             GSCoreMessage::Reply(id) => Segment::Reply { id },
             GSCoreMessage::Node(node) => Segment::Node {
                 id: None,
-                user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
-                nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                user_id: Some(config::get().gscore_node_sender_id.to_string()),
+                nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
                 content: Some(
                     node.into_iter()
                         .map(|seg| seg.into())

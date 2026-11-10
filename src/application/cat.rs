@@ -36,7 +36,7 @@ impl CatApp {
 
     async fn handle_message_event(&self, event: &MessageEvent) -> Result<()> {
         if let MessageEvent::Group(event) = event {
-            if !config::WHITE_GROUPS.contains(&event.group_id) {
+            if !config::get().white_groups.contains(&event.group_id) {
                 // white list mode
                 return Ok(());
             }

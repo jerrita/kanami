@@ -126,7 +126,7 @@ impl ChatApp {
     ) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
             if let MessageEvent::Group(g) = event {
-                if !config::WHITE_GROUPS.contains(&g.group_id) {
+                if !config::get().white_groups.contains(&g.group_id) {
                     return Ok(());
                 }
             }
@@ -165,7 +165,7 @@ impl ChatApp {
 
             // Handle !switch command separately for OWNER only
             if cmd == "!switch" {
-                if user_id != config::OWNER {
+                if user_id != config::get().owner {
                     return Ok(());
                 }
 

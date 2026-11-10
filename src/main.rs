@@ -12,6 +12,7 @@ mod protocol;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    config::load()?;
     logger::init();
     log::info!("Hello Kanami Bot!");
     adapter::launch().await

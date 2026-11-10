@@ -38,14 +38,14 @@ pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>) {
 }
 
 async fn connect_gscore() -> Result<WsStream> {
-    log::info!("Connecting to GSCore at {}", config::GSCORE_ENDPOINT);
+    log::info!("Connecting to GSCore at {}", config::get().gscore_endpoint.as_str());
 
     let mut ws_config = WebSocketConfig::default();
     ws_config.max_message_size = Some(64 * 1024 * 1024);
     ws_config.max_frame_size = Some(16 * 1024 * 1024);
 
     let (ws, _) =
-        connect_async_with_config(config::GSCORE_ENDPOINT, Some(ws_config), false).await?;
+        connect_async_with_config(config::get().gscore_endpoint.as_str(), Some(ws_config), false).await?;
 
     log::info!("GSCore WebSocket connection established");
     Ok(ws)
@@ -179,8 +179,8 @@ async fn process_message_send(mut send: MessageSend) -> Result<()> {
                     x.iter()
                         .map(|e| Segment::Node {
                             id: None,
-                            user_id: Some(config::GSCORE_NODE_SENDER_ID.to_string()),
-                            nickname: Some(config::GSCORE_NODE_SENDER_NICKNAME.to_string()),
+                            user_id: Some(config::get().gscore_node_sender_id.to_string()),
+                            nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
                             content: Some(Segment::from(e).into()),
                         })
                         .collect::<Vec<Segment>>(),

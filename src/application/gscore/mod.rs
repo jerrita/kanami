@@ -33,7 +33,7 @@ impl super::Application for GSCoreAdapter {
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(msg_event) = event.as_ref() {
             if let MessageEvent::Group(e) = msg_event {
-                if !config::GSCORE_ENABLED_GROUPS.contains(&e.group_id) {
+                if !config::get().gscore_enabled_groups.contains(&e.group_id) {
                     return Ok(());
                 }
             }

@@ -16,7 +16,7 @@ pub struct CronApp {
 
 async fn send_prompt(content: &str) -> Result<()> {
     let bot = get_bot().await;
-    bot.send_group_message(config::MAIN_GROUP, content).await?;
+    bot.send_group_message(config::get().main_group, content).await?;
     Ok(())
 }
 
@@ -53,7 +53,7 @@ impl Application for CronApp {
                 Box::pin(async move {
                     if let Err(e) = get_bot()
                         .await
-                        .send_private_message(config::USER_1, "晚上好！今天记得打卡哦~")
+                        .send_private_message(config::get().user_1, "晚上好！今天记得打卡哦~")
                         .await
                     {
                         log::error!("failed to send prompt: {}", e);
