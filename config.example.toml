@@ -5,7 +5,6 @@ owner = 1145141919810
 main_group = 1145141919810
 
 white_groups = [1145141919810]
-user_1 = 1145141919810
 openai_token = "replace-with-openai-token"
 openai_base = "https://api.openai.com"
 
@@ -24,4 +23,22 @@ node_sender_nickname = "Kanami"
 
 [cat]
 white_groups = [1145141919810]
+
+[cron]
+# cron 表达式包含秒，使用 UTC；target.type 可为 main_group、group 或 private。
+# main_group 使用系统 main_group；group/private 必须提供 id。
+[[cron.jobs]]
+schedule = "0 0 0 * * 5"
+content = "周五啦！"
+target = { type = "main_group" }
+
+[[cron.jobs]]
+schedule = "0 0 0 * * 1"
+content = "周一啦！"
+target = { type = "group", id = 1145141919810 }
+
+[[cron.jobs]]
+schedule = "0 0 13 * * *"
+content = "晚上好！今天记得打卡哦~"
+target = { type = "private", id = 1145141919810 }
 

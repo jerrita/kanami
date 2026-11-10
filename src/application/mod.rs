@@ -56,7 +56,9 @@ lazy_static! {
         if let Some(config) = &config.cat {
             apps.push(create_app(Box::new(CatApp::new(config))));
         }
-        apps.push(create_app(Box::new(CronApp::new())));
+        if let Some(config) = &config.cron {
+            apps.push(create_app(Box::new(CronApp::new(config))));
+        }
         apps.push(create_app(Box::new(ChatApp::new(
             config.openai_token.as_str(),
             config.openai_base.as_str(),
