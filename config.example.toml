@@ -3,24 +3,22 @@ endpoint = "ws://127.0.0.1:3001"
 token = "replace-with-napcat-token"
 owner = 1145141919810
 main_group = 1145141919810
+apps = ["builtin", "ping", "gscore", "cat", "chat", "cron", "muri"]
 
-# 存在应用小节即启用；禁用时删除整个小节（包括它的子表）。
-# 应用一旦启用，其所有字段都必须填写。空白名单表示不响应任何群，私聊不受影响。
-[builtin]
-
-[ping]
-
-[gscore]
+# apps 按列表顺序构造和启动应用；从列表删除名字即可停用并保留配置。
+# 无配置的应用无需空段；启用的应用不提供字段默认值。
+# 空白名单表示不响应任何群，私聊不受影响。
+[app.gscore]
 endpoint = "ws://127.0.0.1:8765/ws/kanami"
 bot_id = "Kanami"
 enabled_groups = [1145141919810]
 node_sender_id = "1145141919810"
 node_sender_nickname = "Kanami"
 
-[cat]
+[app.cat]
 white_groups = [1145141919810]
 
-[chat]
+[app.chat]
 token = "replace-with-openai-token"
 # 请求地址为 base_url + /v1/chat/completions。
 base_url = "https://api.openai.com"
@@ -33,24 +31,24 @@ history_max_length = 6
 # 按 UTF-8 字节计数，必须大于零。
 max_message_length = 2800
 
-[cron]
+[app.cron]
 # cron 表达式包含秒，使用 UTC；target.type 可为 main_group、group 或 private。
 # main_group 使用系统 main_group；group/private 必须提供 id。
-[[cron.jobs]]
+[[app.cron.jobs]]
 schedule = "0 0 0 * * 5"
 content = "周五啦！"
 target = { type = "main_group" }
 
-[[cron.jobs]]
+[[app.cron.jobs]]
 schedule = "0 0 0 * * 1"
 content = "周一啦！"
 target = { type = "group", id = 1145141919810 }
 
-[[cron.jobs]]
+[[app.cron.jobs]]
 schedule = "0 0 13 * * *"
 content = "晚上好！今天记得打卡哦~"
 target = { type = "private", id = 1145141919810 }
 
-[muri]
+[app.muri]
 white_groups = [1145141919810]
 

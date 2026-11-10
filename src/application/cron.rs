@@ -11,7 +11,7 @@ use crate::{
     protocol::{event::Event, get_bot},
 };
 
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub jobs: Vec<JobConfig>,

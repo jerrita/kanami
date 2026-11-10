@@ -11,7 +11,7 @@ mod daemon;
 mod model;
 use model::*;
 
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub endpoint: String,

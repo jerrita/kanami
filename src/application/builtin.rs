@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {}
 

@@ -26,7 +26,7 @@ const SUMMARY_PREFIX: &str = "这是之前对话的摘要: ";
 const RATE_LIMIT_MESSAGE: &str = "你问得太快了，休息一下吧~";
 const REPLY_DELAY_MS: u64 = 100;
 
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub token: String,

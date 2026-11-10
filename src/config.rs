@@ -1,9 +1,7 @@
-use std::{env, fs, path::PathBuf, sync::OnceLock};
+use std::{collections::BTreeMap, env, fs, path::PathBuf, sync::OnceLock};
 
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
-
-use crate::application::{builtin, cat, chat, cron, gscore, muri, ping};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -12,13 +10,9 @@ pub struct Config {
     pub token: String,
     pub owner: i64,
     pub main_group: i64,
-    pub builtin: Option<builtin::Config>,
-    pub ping: Option<ping::Config>,
-    pub gscore: Option<gscore::Config>,
-    pub cat: Option<cat::Config>,
-    pub cron: Option<cron::Config>,
-    pub chat: Option<chat::Config>,
-    pub muri: Option<muri::Config>,
+    pub apps: Vec<String>,
+    #[serde(default)]
+    pub app: BTreeMap<String, toml::Table>,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -53,6 +47,7 @@ mod tests {
 
     #[test]
     fn example_matches_schema() {
-        toml::from_str::<Config>(include_str!("../config.example.toml")).unwrap();
+        let config = toml::from_str::<Config>(include_str!("../config.example.toml")).unwrap();
+        crate::application::create(&config).unwrap();
     }
 }

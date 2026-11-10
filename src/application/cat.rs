@@ -15,7 +15,7 @@ struct CatApiResponse {
     url: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub white_groups: Vec<i64>,

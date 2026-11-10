@@ -39,7 +39,7 @@ lazy_static! {
     };
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub white_groups: Vec<i64>,

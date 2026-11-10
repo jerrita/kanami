@@ -8,7 +8,7 @@ use crate::{
     config,
     protocol::event::Event,
 };
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use tokio::sync::Mutex;
@@ -62,37 +62,60 @@ impl<A: Application> MountedApp for Mounted<A> {
     }
 }
 
-fn create_app<A: Application>(config: A::Config) -> Result<AppType> {
-    Ok(Arc::new(Mutex::new(Box::new(Mounted(A::new(config)?)))))
+struct Registration {
+    name: &'static str,
+    mount: fn(toml::Table) -> Result<AppType>,
+}
+
+fn mount<A: Application>() -> Registration {
+    Registration {
+        name: A::NAME,
+        mount: |table| {
+            let config = table.try_into::<A::Config>()?;
+            Ok(Arc::new(Mutex::new(Box::new(Mounted(A::new(config)?)))))
+        },
+    }
+}
+
+pub fn create(config: &config::Config) -> Result<Vec<AppType>> {
+    let registry = [
+        mount::<BuiltinApp>(),
+        mount::<PingApp>(),
+        mount::<GSCoreAdapter>(),
+        mount::<CatApp>(),
+        mount::<CronApp>(),
+        mount::<ChatApp>(),
+        mount::<MuriApp>(),
+    ];
+    for name in config.app.keys() {
+        if !registry.iter().any(|app| app.name == name) {
+            bail!("unknown app: {name}");
+        }
+    }
+    config
+        .apps
+        .iter()
+        .map(|name| {
+            let registration = registry
+                .iter()
+                .find(|app| app.name == name)
+                .with_context(|| format!("unknown app: {name}"))?;
+            let table = match config.app.get(name) {
+                Some(table) => table.clone(),
+                None => toml::Table::new(),
+            };
+            (registration.mount)(table).with_context(|| format!("app.{name}"))
+        })
+        .collect()
 }
 
 pub async fn start() -> Result<Vec<AppType>> {
-    let config = config::get();
-    let mut apps = Vec::new();
-    if let Some(config) = &config.builtin {
-        apps.push(create_app::<BuiltinApp>(config.clone())?);
-    }
-    if let Some(config) = &config.ping {
-        apps.push(create_app::<PingApp>(config.clone())?);
-    }
-    if let Some(config) = &config.gscore {
-        apps.push(create_app::<GSCoreAdapter>(config.clone())?);
-    }
-    if let Some(config) = &config.cat {
-        apps.push(create_app::<CatApp>(config.clone())?);
-    }
-    if let Some(config) = &config.cron {
-        apps.push(create_app::<CronApp>(config.clone())?);
-    }
-    if let Some(config) = &config.chat {
-        apps.push(create_app::<ChatApp>(config.clone())?);
-    }
-    if let Some(config) = &config.muri {
-        apps.push(create_app::<MuriApp>(config.clone())?);
-    }
+    let apps = create(config::get())?;
     for app in &apps {
         let mut app = app.lock().await;
-        app.start().await?;
+        app.start()
+            .await
+            .with_context(|| format!("app.{} start", app.name()))?;
         log::info!("app <{}> started", app.name());
     }
     Ok(apps)
