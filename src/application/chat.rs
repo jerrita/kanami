@@ -33,7 +33,6 @@ pub struct Config {
     pub base_url: String,
     pub default_model: String,
     pub system_prompt: String,
-    pub white_groups: Vec<i64>,
     pub rate_limit_window_secs: u64,
     pub rate_limit_max: usize,
     pub history_max_length: usize,
@@ -129,12 +128,6 @@ impl ChatApp {
         event: Arc<Event>,
     ) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
-            if let MessageEvent::Group(g) = event
-                && !context.config.white_groups.contains(&g.group_id)
-            {
-                return Ok(());
-            }
-
             let segments = event.message().segments();
             let (mut text_prompt, mut images_to_process) = Self::extract_text_and_images(segments);
 

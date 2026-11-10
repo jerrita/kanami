@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, de::DeserializeOwned};
 use tokio::sync::Mutex;
 
 pub(crate) mod builtin;
@@ -45,7 +45,27 @@ pub trait MountedApp: Send + Sync {
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()>;
 }
 
-struct Mounted<A>(A);
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum List {
+    Allow(Vec<i64>),
+    Deny(Vec<i64>),
+}
+
+impl List {
+    fn allows(&self, id: i64) -> bool {
+        match self {
+            Self::Allow(ids) => ids.contains(&id),
+            Self::Deny(ids) => !ids.contains(&id),
+        }
+    }
+}
+
+struct Mounted<A> {
+    app: A,
+    groups: Option<List>,
+    users: Option<List>,
+}
 
 #[async_trait]
 impl<A: Application> MountedApp for Mounted<A> {
@@ -54,11 +74,21 @@ impl<A: Application> MountedApp for Mounted<A> {
     }
 
     async fn start(&mut self) -> Result<()> {
-        self.0.start().await
+        self.app.start().await
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
-        self.0.on_event(event).await
+        if let (Some(groups), Some(id)) = (&self.groups, event.group_id())
+            && !groups.allows(id)
+        {
+            return Ok(());
+        }
+        if let (Some(users), Some(id)) = (&self.users, event.user_id())
+            && !users.allows(id)
+        {
+            return Ok(());
+        }
+        self.app.on_event(event).await
     }
 }
 
@@ -70,9 +100,23 @@ struct Registration {
 fn mount<A: Application>() -> Registration {
     Registration {
         name: A::NAME,
-        mount: |table| {
+        mount: |mut table| {
+            let groups = table
+                .remove("groups")
+                .map(toml::Value::try_into)
+                .transpose()
+                .context("groups")?;
+            let users = table
+                .remove("users")
+                .map(toml::Value::try_into)
+                .transpose()
+                .context("users")?;
             let config = table.try_into::<A::Config>()?;
-            Ok(Arc::new(Mutex::new(Box::new(Mounted(A::new(config)?)))))
+            Ok(Arc::new(Mutex::new(Box::new(Mounted {
+                app: A::new(config)?,
+                groups,
+                users,
+            }))))
         },
     }
 }

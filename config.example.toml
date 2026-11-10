@@ -7,16 +7,18 @@ apps = ["builtin", "ping", "gscore", "cat", "chat", "cron", "muri"]
 
 # apps 按列表顺序构造和启动应用；从列表删除名字即可停用并保留配置。
 # 无配置的应用无需空段；启用的应用不提供字段默认值。
-# 空白名单表示不响应任何群，私聊不受影响。
+# 每个应用可选 groups/users = { allow = [...] } 或 { deny = [...] }，二选一。
+# 不写则不限制；allow=[] 拒绝所有带相应 ID 的事件，deny=[] 不限制。
+# groups 覆盖所有带 group_id 的消息、通知、请求，users 同理。
 [app.gscore]
 endpoint = "ws://127.0.0.1:8765/ws/kanami"
 bot_id = "Kanami"
-enabled_groups = [1145141919810]
+groups = { allow = [1145141919810] }
 node_sender_id = "1145141919810"
 node_sender_nickname = "Kanami"
 
 [app.cat]
-white_groups = [1145141919810]
+groups = { allow = [1145141919810] }
 
 [app.chat]
 token = "replace-with-openai-token"
@@ -24,7 +26,7 @@ token = "replace-with-openai-token"
 base_url = "https://api.openai.com"
 default_model = "claude-sonnet-4-20250514"
 system_prompt = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。你的回答为无代码块包裹的rst格式。不要使用粗体和斜体，除非你有充分的理由那么做。"
-white_groups = [1145141919810]
+groups = { allow = [1145141919810] }
 rate_limit_window_secs = 60
 rate_limit_max = 3
 history_max_length = 6
@@ -50,5 +52,5 @@ content = "晚上好！今天记得打卡哦~"
 target = { type = "private", id = 1145141919810 }
 
 [app.muri]
-white_groups = [1145141919810]
+groups = { allow = [1145141919810] }
 

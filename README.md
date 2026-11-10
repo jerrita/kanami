@@ -32,10 +32,12 @@ py 虽然拿来写 bot 很舒服，但还是存在一些局限性：
 `endpoint`、`token`、`owner`、`main_group` 是必填的系统字段。各应用保留的部署配置如下：
 
 - `builtin`、`ping`：无需配置段。
-- `[app.chat]`：`token`、`base_url`、`default_model`、`system_prompt`、`white_groups`、`rate_limit_window_secs`、`rate_limit_max`、`history_max_length`、`max_message_length`，用于设置服务连接、回复行为、权限和用量限制。
-- `[app.gscore]`：`endpoint`、`bot_id`、`enabled_groups`、`node_sender_id`、`node_sender_nickname`，用于设置服务连接、群范围和转发身份。
-- `[app.cat]`、`[app.muri]`：仅 `white_groups`，控制可响应的群。
+- `[app.chat]`：`token`、`base_url`、`default_model`、`system_prompt`、`rate_limit_window_secs`、`rate_limit_max`、`history_max_length`、`max_message_length`，用于设置服务连接、回复行为和用量限制。
+- `[app.gscore]`：`endpoint`、`bot_id`、`node_sender_id`、`node_sender_nickname`，用于设置服务连接和转发身份。
+- `cat`、`muri`：无需应用配置；示例仅配置框架名单。
 - `[[app.cron.jobs]]`：`schedule`、`target`、`content`，配置推送时间、目标和文案；cron 表达式使用 UTC。
+
+每个应用段可选 `groups = { allow = [...] }` 或 `groups = { deny = [...] }`，`users` 同理，每种名单只可选一种模式。不写则不限制，空 allow 拒绝所有带相应 ID 的事件，空 deny 不限制。群名单作用于所有带 `group_id` 的消息、通知和请求；用户名单作用于所有带 `user_id` 的事件。无相应 ID 的事件不受该名单限制。框架在进入应用处理函数前过滤，名单字段不进入应用自身的配置。
 
 完整字段见 `config.example.toml`，启用的应用不提供字段默认值；未启用的配置段保留但不解析。列表中或配置段中的未知应用名会使启动失败。只将部署者确有必要修改的通用行为暴露为配置；muri 词库、cat API 地址及每次最多 3 张图、chat 的摘要文案、限流提示和发送间隔保留在应用代码里。解析失败时报告字段路径，不打印配置文件原文。
 

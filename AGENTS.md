@@ -21,10 +21,10 @@ Kanami：suckless 风格的 QQ bot 客户端，Rust 编写，对接 NapCat（One
 
 - `src/main.rs`：初始化日志，启动协议适配器。
 - `src/protocol/adapter.rs`：核心。WebSocket 连接、事件分发、重连，以及到应用层的桥接。
-- `src/protocol/event/`、`src/protocol/message.rs`：OneBot 事件与消息类型。
+- `src/protocol/event/`、`src/protocol/message.rs`：OneBot 事件与消息类型。新增事件时同步维护 `Event::group_id()` / `user_id()`，框架名单覆盖所有带对应 ID 的事件。
 - `src/protocol/extension/`：OneBot 与 NapCat 扩展 API（`napcat` feature，默认开启）。
 - `src/application/mod.rs`：`Application` trait 与应用注册表。先完成所有应用的 `new`、`start`，再连接 WS；重连不得重新调用应用生命周期方法。
-- `src/application/*`：各个应用（builtin、chat、cat、cron、gscore、muri、ping）。新应用参照 `template.rs` 实现 `Application`，在自身模块定义配置结构体，再到 `mod.rs` 注册表增加一行 `mount::<YourApp>()`。顶层 `apps` 列表控制启用和顺序，配置放在 `[app.<name>]`；`config.rs` 不引用应用类型。
+- `src/application/*`：各个应用（builtin、chat、cat、cron、gscore、muri、ping）。新应用参照 `template.rs` 实现 `Application`，在自身模块定义配置结构体，再到 `mod.rs` 注册表增加一行 `mount::<YourApp>()`。顶层 `apps` 列表控制启用和顺序，配置放在 `[app.<name>]`；`config.rs` 不引用应用类型。可选 `groups` / `users` allow/deny 名单由挂载 wrapper 处理，应用内不要重复过滤。
 
 ## 风格
 

@@ -17,22 +17,17 @@ struct CatApiResponse {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    pub white_groups: Vec<i64>,
-}
+pub struct Config {}
 
-pub struct CatApp {
-    config: Arc<Config>,
-}
+pub struct CatApp;
 
 #[async_trait]
 impl super::Application for CatApp {
     const NAME: &'static str = "cat";
     type Config = Config;
 
-    fn new(config: Config) -> Result<Self> {
-        let config = Arc::new(config);
-        Ok(Self { config })
+    fn new(_config: Config) -> Result<Self> {
+        Ok(Self)
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
@@ -45,13 +40,6 @@ impl super::Application for CatApp {
 
 impl CatApp {
     async fn handle_message_event(&self, event: &MessageEvent) -> Result<()> {
-        if let MessageEvent::Group(event) = event
-            && !self.config.white_groups.contains(&event.group_id)
-        {
-            // white list mode
-            return Ok(());
-        }
-
         let raw_message = event.raw_message();
         let count = raw_message.matches('喵').count();
 

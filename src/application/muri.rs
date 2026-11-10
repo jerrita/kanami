@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 use rand::seq::IndexedRandom;
 
-use crate::protocol::event::{Event, MessageEvent};
+use crate::protocol::event::Event;
 
 lazy_static! {
     static ref DB: DashMap<String, Vec<String>> = {
@@ -41,31 +41,21 @@ lazy_static! {
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    pub white_groups: Vec<i64>,
-}
+pub struct Config {}
 
-pub struct MuriApp {
-    config: Arc<Config>,
-}
+pub struct MuriApp;
 
 #[async_trait]
 impl super::Application for MuriApp {
     const NAME: &'static str = "muri";
     type Config = Config;
 
-    fn new(config: Config) -> Result<Self> {
-        let config = Arc::new(config);
-        Ok(Self { config })
+    fn new(_config: Config) -> Result<Self> {
+        Ok(Self)
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(event) = event.as_ref() {
-            if let MessageEvent::Group(group) = event
-                && !self.config.white_groups.contains(&group.group_id)
-            {
-                return Ok(());
-            }
             let raw = event.raw_message();
             if let Some(key) = DB.get(raw) {
                 let choise = key.choose(&mut rand::rng()).unwrap();

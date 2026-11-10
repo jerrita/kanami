@@ -1,6 +1,6 @@
 // https://docs.sayu-bot.com/CodeAdapter/Protocol.html
 
-use crate::protocol::event::{Event, MessageEvent};
+use crate::protocol::event::Event;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -16,7 +16,6 @@ use model::*;
 pub struct Config {
     pub endpoint: String,
     pub bot_id: String,
-    pub enabled_groups: Vec<i64>,
     pub node_sender_id: String,
     pub node_sender_nickname: String,
 }
@@ -48,11 +47,6 @@ impl super::Application for GSCoreAdapter {
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(msg_event) = event.as_ref() {
-            if let MessageEvent::Group(e) = msg_event
-                && !self.config.enabled_groups.contains(&e.group_id)
-            {
-                return Ok(());
-            }
             if let Some(sender) = &self.sender {
                 let message_receive = MessageReceive::new(msg_event, &self.config);
                 if let Err(e) = sender.send(message_receive).await {
