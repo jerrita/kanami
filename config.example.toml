@@ -22,3 +22,6 @@ enabled_groups = [1145141919810]
 node_sender_id = "1145141919810"
 node_sender_nickname = "Kanami"
 
+[cat]
+white_groups = [1145141919810]
+

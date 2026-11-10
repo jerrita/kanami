@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
 pub(crate) mod builtin;
-mod cat;
+pub(crate) mod cat;
 mod chat;
 pub(crate) mod gscore;
 mod muri;
@@ -53,7 +53,9 @@ lazy_static! {
         if let Some(config) = &config.gscore {
             apps.push(create_app(Box::new(GSCoreAdapter::new(config))));
         }
-        apps.push(create_app(Box::new(CatApp::new())));
+        if let Some(config) = &config.cat {
+            apps.push(create_app(Box::new(CatApp::new(config))));
+        }
         apps.push(create_app(Box::new(CronApp::new())));
         apps.push(create_app(Box::new(ChatApp::new(
             config.openai_token.as_str(),
