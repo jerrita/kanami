@@ -182,7 +182,7 @@ async fn process_message_send(mut send: MessageSend, config: &Config) -> Result<
                     x.iter()
                         .map(|e| Segment::Node {
                             id: None,
-                            user_id: Some(config.node_sender_id.clone()),
+                            user_id: Some(config.node_sender_id.to_string()),
                             nickname: Some(config.node_sender_nickname.clone()),
                             content: Some(Segment::from(e).into()),
                         })

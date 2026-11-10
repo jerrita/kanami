@@ -153,7 +153,7 @@ impl GSCoreMessage {
             GSCoreMessage::Reply(id) => Segment::Reply { id },
             GSCoreMessage::Node(node) => Segment::Node {
                 id: None,
-                user_id: Some(config.node_sender_id.clone()),
+                user_id: Some(config.node_sender_id.to_string()),
                 nickname: Some(config.node_sender_nickname.clone()),
                 content: Some(
                     node.into_iter()

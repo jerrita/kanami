@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     application::{
@@ -47,12 +47,12 @@ pub trait MountedApp: Send + Sync {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum List {
-    Allow(Vec<i64>),
-    Deny(Vec<i64>),
+enum List<T> {
+    Allow(Vec<T>),
+    Deny(Vec<T>),
 }
 
-impl List {
+impl List<i64> {
     fn allows(&self, id: i64) -> bool {
         match self {
             Self::Allow(ids) => ids.contains(&id),
@@ -61,10 +61,27 @@ impl List {
     }
 }
 
+impl List<config::Id> {
+    fn resolve(self, aliases: &BTreeMap<String, i64>) -> Result<List<i64>> {
+        match self {
+            Self::Allow(ids) => Ok(List::Allow(
+                ids.into_iter()
+                    .map(|id| id.resolve(aliases))
+                    .collect::<Result<_>>()?,
+            )),
+            Self::Deny(ids) => Ok(List::Deny(
+                ids.into_iter()
+                    .map(|id| id.resolve(aliases))
+                    .collect::<Result<_>>()?,
+            )),
+        }
+    }
+}
+
 struct Mounted<A> {
     app: A,
-    groups: Option<List>,
-    users: Option<List>,
+    groups: Option<List<i64>>,
+    users: Option<List<i64>>,
 }
 
 #[async_trait]
@@ -103,12 +120,20 @@ fn mount<A: Application>() -> Registration {
         mount: |mut table| {
             let groups = table
                 .remove("groups")
-                .map(toml::Value::try_into)
+                .map(|value| {
+                    value
+                        .try_into::<List<config::Id>>()?
+                        .resolve(&config::get().alias.group)
+                })
                 .transpose()
                 .context("groups")?;
             let users = table
                 .remove("users")
-                .map(toml::Value::try_into)
+                .map(|value| {
+                    value
+                        .try_into::<List<config::Id>>()?
+                        .resolve(&config::get().alias.user)
+                })
                 .transpose()
                 .context("users")?;
             let config = table.try_into::<A::Config>()?;
@@ -121,7 +146,8 @@ fn mount<A: Application>() -> Registration {
     }
 }
 
-pub fn create(config: &config::Config) -> Result<Vec<AppType>> {
+pub fn create() -> Result<Vec<AppType>> {
+    let config = config::get();
     let registry = [
         mount::<BuiltinApp>(),
         mount::<PingApp>(),
@@ -154,7 +180,7 @@ pub fn create(config: &config::Config) -> Result<Vec<AppType>> {
 }
 
 pub async fn start() -> Result<Vec<AppType>> {
-    let apps = create(config::get())?;
+    let apps = create()?;
     for app in &apps {
         let mut app = app.lock().await;
         app.start()

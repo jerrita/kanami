@@ -28,9 +28,14 @@ pub struct JobConfig {
 #[derive(Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Target {
-    MainGroup {},
-    Group { id: i64 },
-    Private { id: i64 },
+    Group {
+        #[serde(deserialize_with = "config::group_id")]
+        id: i64,
+    },
+    Private {
+        #[serde(deserialize_with = "config::user_id")]
+        id: i64,
+    },
 }
 
 pub struct CronApp {
@@ -61,13 +66,6 @@ impl Application for CronApp {
                     Box::pin(async move {
                         let bot = get_bot().await;
                         let result = match job.target {
-                            Target::MainGroup {} => {
-                                bot.send_group_message(
-                                    config::get().main_group,
-                                    job.content.as_str(),
-                                )
-                                .await
-                            }
                             Target::Group { id } => {
                                 bot.send_group_message(id, job.content.as_str()).await
                             }

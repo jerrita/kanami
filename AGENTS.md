@@ -8,6 +8,7 @@ Kanami：suckless 风格的 QQ bot 客户端，Rust 编写，对接 NapCat（One
 - 系统配置项以 `src/config.rs` 为准，应用配置项以各应用模块的配置结构体为准；新增或修改配置项时同步更新 `config.example.toml`。
 - 只有逻辑通用、部署者确有必要修改的项才暴露为配置；应用自带数据和实现细节保留在应用代码中（如 muri 词库、cat API 地址及图片数量上限、chat 摘要文案和发送间隔）。
 - 配置解析错误保留字段路径，不打印配置文件原文。
+- `[alias.group]` / `[alias.user]` 是独立命名空间。应用配置中的群号/QQ 号字段用 `i64`，通过 `config::group_id` / `config::user_id` 反序列化；系统配置加载完成后再解析应用配置。不要恢复 `main_group` 专用配置或 target。
 - 不要改 `.cargo/config.toml`。
 
 ## 常用命令

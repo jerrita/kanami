@@ -1,6 +1,6 @@
 // https://docs.sayu-bot.com/CodeAdapter/Protocol.html
 
-use crate::protocol::event::Event;
+use crate::{config, protocol::event::Event};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -16,7 +16,8 @@ use model::*;
 pub struct Config {
     pub endpoint: String,
     pub bot_id: String,
-    pub node_sender_id: String,
+    #[serde(deserialize_with = "config::user_id")]
+    pub node_sender_id: i64,
     pub node_sender_nickname: String,
 }
 
