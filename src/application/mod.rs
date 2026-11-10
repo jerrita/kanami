@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use crate::{
     application::{
@@ -38,6 +41,7 @@ pub trait Application: Send + Sync + Sized + 'static {
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()>;
 }
 
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait MountedApp: Send + Sync {
     fn name(&self) -> &'static str;
@@ -162,10 +166,14 @@ pub fn create() -> Result<Vec<AppType>> {
             bail!("unknown app: {name}");
         }
     }
+    let mut enabled = BTreeSet::new();
     config
         .apps
         .iter()
         .map(|name| {
+            if !enabled.insert(name) {
+                bail!("apps: duplicate app: {name}");
+            }
             let registration = registry
                 .iter()
                 .find(|app| app.name == name)

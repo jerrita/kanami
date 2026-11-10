@@ -1,7 +1,7 @@
 // https://docs.sayu-bot.com/CodeAdapter/Protocol.html
 
 use crate::{config, protocol::event::Event};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -24,7 +24,6 @@ pub struct Config {
 pub struct GSCoreAdapter {
     config: Arc<Config>,
     sender: Option<mpsc::Sender<MessageReceive>>,
-    connection_starting: bool,
 }
 
 #[async_trait]
@@ -37,52 +36,25 @@ impl super::Application for GSCoreAdapter {
         Ok(Self {
             config,
             sender: None,
-            connection_starting: false,
         })
     }
 
     async fn start(&mut self) -> Result<()> {
-        self.start_gscore_connection().await?;
+        let (sender, receiver) = mpsc::channel(100);
+        self.sender = Some(sender);
+        let config = self.config.clone();
+        tokio::spawn(daemon::gscore_loop(receiver, config));
         Ok(())
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(msg_event) = event.as_ref() {
-            if let Some(sender) = &self.sender {
-                let message_receive = MessageReceive::new(msg_event, &self.config);
-                if let Err(e) = sender.send(message_receive).await {
-                    log::info!(
-                        "GSCore handler unavailable ({}), restarting connection...",
-                        e
-                    );
-                    // 重新启动连接
-                    self.sender = None;
-                    if let Err(restart_err) = self.start_gscore_connection().await {
-                        log::warn!("Failed to restart GSCore connection: {}", restart_err);
-                    }
-                }
-            }
+            self.sender
+                .as_ref()
+                .context("gscore has not started")?
+                .send(MessageReceive::new(msg_event, &self.config))
+                .await?;
         }
-        Ok(())
-    }
-}
-
-impl GSCoreAdapter {
-    async fn start_gscore_connection(&mut self) -> Result<()> {
-        if self.sender.is_some() || self.connection_starting {
-            return Ok(()); // Already connected or connecting
-        }
-
-        self.connection_starting = true;
-        let (tx, rx) = mpsc::channel(100); // Increase buffer size
-        self.sender = Some(tx);
-        self.connection_starting = false;
-
-        let config = self.config.clone();
-        tokio::spawn(async move {
-            daemon::gscore_loop(rx, config).await;
-        });
-
         Ok(())
     }
 }
