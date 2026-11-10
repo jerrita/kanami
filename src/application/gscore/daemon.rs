@@ -1,5 +1,5 @@
+use super::Config;
 use crate::application::gscore::model::*;
-use crate::config;
 use crate::protocol::get_bot;
 use crate::protocol::message::Segment;
 use anyhow::{Result, anyhow};
@@ -15,13 +15,13 @@ type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// GSCore主循环，处理自动重连
-pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>) {
+pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>, config: &'static Config) {
     let mut retry = 0u32;
     loop {
-        match connect_gscore().await {
+        match connect_gscore(config).await {
             Ok(ws) => {
                 retry = 0;
-                if let Err(e) = event_loop(ws, &mut receiver).await {
+                if let Err(e) = event_loop(ws, &mut receiver, config).await {
                     log::warn!("GSCore event loop error: {}", e);
                 }
             }
@@ -37,21 +37,24 @@ pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>) {
     }
 }
 
-async fn connect_gscore() -> Result<WsStream> {
-    log::info!("Connecting to GSCore at {}", config::get().gscore_endpoint.as_str());
+async fn connect_gscore(config: &Config) -> Result<WsStream> {
+    log::info!("Connecting to GSCore at {}", config.endpoint);
 
     let mut ws_config = WebSocketConfig::default();
     ws_config.max_message_size = Some(64 * 1024 * 1024);
     ws_config.max_frame_size = Some(16 * 1024 * 1024);
 
-    let (ws, _) =
-        connect_async_with_config(config::get().gscore_endpoint.as_str(), Some(ws_config), false).await?;
+    let (ws, _) = connect_async_with_config(&config.endpoint, Some(ws_config), false).await?;
 
     log::info!("GSCore WebSocket connection established");
     Ok(ws)
 }
 
-async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>) -> Result<()> {
+async fn event_loop(
+    ws: WsStream,
+    receiver: &mut mpsc::Receiver<MessageReceive>,
+    config: &Config,
+) -> Result<()> {
     let (mut ws_sender, mut ws_receiver) = ws.split();
 
     loop {
@@ -78,14 +81,14 @@ async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>)
             ws_msg = ws_receiver.next() => {
                 match ws_msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        if let Err(e) = handle_gscore_message(&text).await {
+                        if let Err(e) = handle_gscore_message(&text, config).await {
                             log::error!("Failed to handle GSCore message: {}", e);
                         }
                     }
                     Some(Ok(WsMessage::Binary(data))) => {
                         match std::str::from_utf8(&data) {
                             Ok(text) => {
-                                if let Err(e) = handle_gscore_message(text).await {
+                                if let Err(e) = handle_gscore_message(text, config).await {
                                     log::error!("Failed to handle GSCore binary message: {}", e);
                                 }
                             }
@@ -124,7 +127,7 @@ async fn event_loop(ws: WsStream, receiver: &mut mpsc::Receiver<MessageReceive>)
 }
 
 /// 处理来自 GSCore 的消息
-async fn handle_gscore_message(text: &str) -> Result<()> {
+async fn handle_gscore_message(text: &str, config: &Config) -> Result<()> {
     let msg_size = text.len();
     let preview = if text.len() > 400 {
         // 安全地在字符边界处截断
@@ -148,10 +151,10 @@ async fn handle_gscore_message(text: &str) -> Result<()> {
     log::debug!("Processing MessageSend of size: {} bytes", msg_size);
 
     // 处理消息
-    process_message_send(msg_send).await
+    process_message_send(msg_send, config).await
 }
 
-async fn process_message_send(mut send: MessageSend) -> Result<()> {
+async fn process_message_send(mut send: MessageSend, config: &Config) -> Result<()> {
     let content = match send.content.take() {
         Some(content) => content,
         None => return Ok(()), // 空内容直接返回
@@ -179,8 +182,8 @@ async fn process_message_send(mut send: MessageSend) -> Result<()> {
                     x.iter()
                         .map(|e| Segment::Node {
                             id: None,
-                            user_id: Some(config::get().gscore_node_sender_id.to_string()),
-                            nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
+                            user_id: Some(config.node_sender_id.clone()),
+                            nickname: Some(config.node_sender_nickname.clone()),
                             content: Some(Segment::from(e).into()),
                         })
                         .collect::<Vec<Segment>>(),
@@ -198,9 +201,14 @@ async fn process_message_send(mut send: MessageSend) -> Result<()> {
             .send_forward_msg(Some(target_type), Some(target), Some(target), forwards)
             .await?;
     } else {
+        let message = content
+            .into_iter()
+            .filter(|message| !matches!(message, GSCoreMessage::Group(_)))
+            .map(|message| message.into_segment(config))
+            .collect::<Vec<Segment>>();
         get_bot()
             .await
-            .send_message(Some(target_type), Some(target), Some(target), content)
+            .send_message(Some(target_type), Some(target), Some(target), message)
             .await?;
     }
     Ok(())

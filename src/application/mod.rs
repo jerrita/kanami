@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 pub(crate) mod builtin;
 mod cat;
 mod chat;
-mod gscore;
+pub(crate) mod gscore;
 mod muri;
 pub(crate) mod ping;
 
@@ -50,7 +50,9 @@ lazy_static! {
         if config.ping.is_some() {
             apps.push(create_app(Box::new(PingApp::new())));
         }
-        apps.push(create_app(Box::new(GSCoreAdapter::new())));
+        if let Some(config) = &config.gscore {
+            apps.push(create_app(Box::new(GSCoreAdapter::new(config))));
+        }
         apps.push(create_app(Box::new(CatApp::new())));
         apps.push(create_app(Box::new(CronApp::new())));
         apps.push(create_app(Box::new(ChatApp::new(

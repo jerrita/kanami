@@ -1,9 +1,7 @@
-use crate::{
-    config,
-    protocol::{
-        event::{GroupRole, MessageEvent},
-        message::{Message, Segment},
-    },
+use super::Config;
+use crate::protocol::{
+    event::{GroupRole, MessageEvent},
+    message::{Message, Segment},
 };
 use serde::{Deserialize, Serialize};
 
@@ -74,11 +72,11 @@ pub struct MessageSend {
     pub content: Option<Vec<GSCoreMessage>>,
 }
 
-impl From<&MessageEvent> for MessageReceive {
-    fn from(value: &MessageEvent) -> Self {
+impl MessageReceive {
+    pub fn new(value: &MessageEvent, config: &Config) -> Self {
         match value {
             MessageEvent::Group(event) => Self {
-                bot_id: config::get().gscore_botid.to_string(),
+                bot_id: config.bot_id.clone(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Group,
@@ -99,7 +97,7 @@ impl From<&MessageEvent> for MessageReceive {
                 content: (&event.message).into(),
             },
             MessageEvent::Private(event) => Self {
-                bot_id: config::get().gscore_botid.to_string(),
+                bot_id: config.bot_id.clone(),
                 bot_self_id: event.base.self_id.to_string(),
                 msg_id: event.message_id.to_string(),
                 user_type: TargetType::Direct,
@@ -138,42 +136,9 @@ impl From<&Segment> for GSCoreMessage {
     }
 }
 
-impl From<&GSCoreMessage> for Segment {
-    fn from(value: &GSCoreMessage) -> Self {
-        match value {
-            GSCoreMessage::Text(text) => Segment::Text { text: text.clone() },
-            GSCoreMessage::Markdown(text) => Segment::Text { text: text.clone() },
-            GSCoreMessage::Image(url) => Segment::Image {
-                file: url.clone(),
-                catagary: None,
-                url: None,
-                cache: None,
-                proxy: None,
-                timeout: None,
-            },
-            GSCoreMessage::At(qq) => Segment::At { qq: qq.clone() },
-            GSCoreMessage::Reply(id) => Segment::Reply { id: id.clone() },
-            GSCoreMessage::Node(node) => Segment::Node {
-                id: None,
-                user_id: Some(config::get().gscore_node_sender_id.to_string()),
-                nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
-                content: Some(
-                    node.iter()
-                        .map(|seg| seg.into())
-                        .collect::<Vec<Segment>>()
-                        .into(),
-                ),
-            },
-            _ => Segment::Text {
-                text: format!("<unsupp: {:?}>", value),
-            },
-        }
-    }
-}
-
-impl From<GSCoreMessage> for Segment {
-    fn from(value: GSCoreMessage) -> Self {
-        match value {
+impl GSCoreMessage {
+    pub fn into_segment(self, config: &Config) -> Segment {
+        match self {
             GSCoreMessage::Text(text) => Segment::Text { text },
             GSCoreMessage::Markdown(text) => Segment::Text { text },
             GSCoreMessage::Image(url) => Segment::Image {
@@ -188,8 +153,8 @@ impl From<GSCoreMessage> for Segment {
             GSCoreMessage::Reply(id) => Segment::Reply { id },
             GSCoreMessage::Node(node) => Segment::Node {
                 id: None,
-                user_id: Some(config::get().gscore_node_sender_id.to_string()),
-                nickname: Some(config::get().gscore_node_sender_nickname.to_string()),
+                user_id: Some(config.node_sender_id.clone()),
+                nickname: Some(config.node_sender_nickname.clone()),
                 content: Some(
                     node.into_iter()
                         .map(|seg| seg.into())
@@ -197,8 +162,8 @@ impl From<GSCoreMessage> for Segment {
                         .into(),
                 ),
             },
-            _ => Segment::Text {
-                text: format!("<unsupp: {:?}>", value),
+            other => Segment::Text {
+                text: format!("<unsupp: {:?}>", other),
             },
         }
     }
@@ -232,22 +197,6 @@ impl From<GSCoreMessageWithoutNode> for Segment {
             GSCoreMessageWithoutNode::At(qq) => Segment::At { qq },
             GSCoreMessageWithoutNode::Reply(id) => Segment::Reply { id },
         }
-    }
-}
-
-impl From<Vec<GSCoreMessage>> for Message {
-    fn from(value: Vec<GSCoreMessage>) -> Self {
-        let msg: Vec<Segment> = value
-            .into_iter()
-            .filter_map(|e| {
-                if let GSCoreMessage::Group(_) = e {
-                    None
-                } else {
-                    Some(e.into())
-                }
-            })
-            .collect();
-        msg.into()
     }
 }
 

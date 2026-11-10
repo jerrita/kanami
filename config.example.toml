@@ -4,11 +4,6 @@ token = "replace-with-napcat-token"
 owner = 1145141919810
 main_group = 1145141919810
 
-gscore_endpoint = "ws://127.0.0.1:8765/ws/kanami"
-gscore_botid = "Kanami"
-gscore_enabled_groups = [1145141919810]
-gscore_node_sender_id = "1145141919810"
-gscore_node_sender_nickname = "Kanami"
 white_groups = [1145141919810]
 user_1 = 1145141919810
 openai_token = "replace-with-openai-token"
@@ -19,4 +14,11 @@ openai_base = "https://api.openai.com"
 [builtin]
 
 [ping]
+
+[gscore]
+endpoint = "ws://127.0.0.1:8765/ws/kanami"
+bot_id = "Kanami"
+enabled_groups = [1145141919810]
+node_sender_id = "1145141919810"
+node_sender_nickname = "Kanami"
 
