@@ -13,17 +13,19 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
-mod builtin;
-mod cat;
-mod chat;
-mod gscore;
-mod muri;
-mod ping;
+pub(crate) mod builtin;
+pub(crate) mod cat;
+pub(crate) mod chat;
+pub(crate) mod gscore;
+pub(crate) mod muri;
+pub(crate) mod ping;
 
 pub mod cron;
 
 type AppType = Arc<Mutex<Box<dyn Application>>>;
 
+// async_trait adds #[must_use] to methods returning an already must-use Future.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Application: Send + Sync {
     fn name(&self) -> &str;
@@ -39,16 +41,30 @@ fn create_app(app: Box<dyn Application>) -> AppType {
 }
 
 lazy_static! {
-    pub static ref APPS: Vec<AppType> = vec![
-        create_app(Box::new(BuiltinApp::new())),
-        create_app(Box::new(PingApp::new())),
-        create_app(Box::new(GSCoreAdapter::new())),
-        create_app(Box::new(CatApp::new())),
-        create_app(Box::new(CronApp::new())),
-        create_app(Box::new(ChatApp::new(
-            config::OPENAI_TOKEN,
-            config::OPENAI_BASE
-        ))),
-        create_app(Box::new(MuriApp::new()))
-    ];
+    pub static ref APPS: Vec<AppType> = {
+        let config = config::get();
+        let mut apps = Vec::new();
+        if config.builtin.is_some() {
+            apps.push(create_app(Box::new(BuiltinApp::new())));
+        }
+        if config.ping.is_some() {
+            apps.push(create_app(Box::new(PingApp::new())));
+        }
+        if let Some(config) = &config.gscore {
+            apps.push(create_app(Box::new(GSCoreAdapter::new(config))));
+        }
+        if let Some(config) = &config.cat {
+            apps.push(create_app(Box::new(CatApp::new(config))));
+        }
+        if let Some(config) = &config.cron {
+            apps.push(create_app(Box::new(CronApp::new(config))));
+        }
+        if let Some(config) = &config.chat {
+            apps.push(create_app(Box::new(ChatApp::new(config))));
+        }
+        if let Some(config) = &config.muri {
+            apps.push(create_app(Box::new(MuriApp::new(config))));
+        }
+        apps
+    };
 }

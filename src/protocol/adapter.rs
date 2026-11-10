@@ -98,8 +98,12 @@ pub async fn listener(
 }
 
 async fn connect() -> Result<WsStream> {
-    log::info!("=> {}", config::ENDPOINT);
-    let url = format!("{}?access_token={}", config::ENDPOINT, config::TOKEN);
+    log::info!("=> {}", config::get().endpoint);
+    let url = format!(
+        "{}?access_token={}",
+        config::get().endpoint,
+        config::get().token
+    );
     let (mut ws, _) = connect_async(&url).await?;
     let msg = ws.next().await.ok_or(anyhow!("WebSocket stream ended"))??;
     let text = match msg {

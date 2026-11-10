@@ -51,7 +51,7 @@ impl Protocol {
     /// # 参数
     ///
     /// * `message_type` - 消息类型，支持 `private`、`group`，分别对应私聊、群组，
-    ///                   如不传入，则根据传入的 `*_id` 参数判断
+    ///   如不传入，则根据传入的 `*_id` 参数判断
     /// * `user_id` - 对方 QQ 号（消息类型为 `private` 时需要）
     /// * `group_id` - 群号（消息类型为 `group` 时需要）
     /// * `message` - 要发送的内容
@@ -550,8 +550,8 @@ impl Protocol {
     ///
     /// * `group_id` - 群号 (number int64)
     /// * `honor_type` - 要获取的群荣誉类型，可传入 `talkative` `performer` `legend`
-    ///                 `strong_newbie` `emotion` 以分别获取单个类型的群荣誉数据，
-    ///                 或传入 `all` 获取所有数据
+    ///   `strong_newbie` `emotion` 以分别获取单个类型的群荣誉数据，
+    ///   或传入 `all` 获取所有数据
     ///
     /// # 响应数据
     ///

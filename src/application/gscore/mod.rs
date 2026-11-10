@@ -1,11 +1,9 @@
 // https://docs.sayu-bot.com/CodeAdapter/Protocol.html
 
-use crate::{
-    config,
-    protocol::event::{Event, MessageEvent},
-};
+use crate::protocol::event::{Event, MessageEvent};
 use anyhow::Result;
 use async_trait::async_trait;
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -13,7 +11,18 @@ mod daemon;
 mod model;
 use model::*;
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub endpoint: String,
+    pub bot_id: String,
+    pub enabled_groups: Vec<i64>,
+    pub node_sender_id: String,
+    pub node_sender_nickname: String,
+}
+
 pub struct GSCoreAdapter {
+    config: &'static Config,
     sender: Option<mpsc::Sender<MessageReceive>>,
     connection_starting: bool,
 }
@@ -32,15 +41,18 @@ impl super::Application for GSCoreAdapter {
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         if let Event::MessageEvent(msg_event) = event.as_ref() {
-            if let MessageEvent::Group(e) = msg_event {
-                if !config::GSCORE_ENABLED_GROUPS.contains(&e.group_id) {
-                    return Ok(());
-                }
+            if let MessageEvent::Group(e) = msg_event
+                && !self.config.enabled_groups.contains(&e.group_id)
+            {
+                return Ok(());
             }
             if let Some(sender) = &self.sender {
-                let message_receive = msg_event.into();
+                let message_receive = MessageReceive::new(msg_event, self.config);
                 if let Err(e) = sender.send(message_receive).await {
-                    log::info!("GSCore handler unavailable ({}), restarting connection...", e);
+                    log::info!(
+                        "GSCore handler unavailable ({}), restarting connection...",
+                        e
+                    );
                     // 重新启动连接
                     self.sender = None;
                     if let Err(restart_err) = self.start_gscore_connection().await {
@@ -54,8 +66,9 @@ impl super::Application for GSCoreAdapter {
 }
 
 impl GSCoreAdapter {
-    pub fn new() -> Self {
-        Self { 
+    pub fn new(config: &'static Config) -> Self {
+        Self {
+            config,
             sender: None,
             connection_starting: false,
         }
@@ -71,8 +84,9 @@ impl GSCoreAdapter {
         self.sender = Some(tx);
         self.connection_starting = false;
 
+        let config = self.config;
         tokio::spawn(async move {
-            daemon::gscore_loop(rx).await;
+            daemon::gscore_loop(rx, config).await;
         });
 
         Ok(())

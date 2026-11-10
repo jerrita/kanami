@@ -25,18 +25,34 @@ py 虽然拿来写 bot 很舒服，但还是存在一些局限性：
 ## Usage
 
 1. fork 本项目
-2. `cp src/config.def.rs src/config.rs` 并修改
-3. 看 `src/application/template.rs`, 写你的应用逻辑
-4. 改 `src/application/mod.rs` 的末尾，把你的应用加进去
+2. `cp config.example.toml config.toml`，填写 NapCat 连接信息和各应用配置
+3. 删除不需要的应用小节及其子表；保留小节即启用该应用，无需修改 Rust 代码
+4. 启动时读取配置一次，修改后重启生效；缺字段、未知字段或类型错误都会使启动失败
+
+`endpoint`、`token`、`owner`、`main_group` 是必填的系统字段。各应用保留的部署配置如下：
+
+- `[builtin]`、`[ping]`：空小节，只控制是否启用。
+- `[chat]`：`token`、`base_url`、`default_model`、`system_prompt`、`white_groups`、`rate_limit_window_secs`、`rate_limit_max`、`history_max_length`、`max_message_length`，用于设置服务连接、回复行为、权限和用量限制。
+- `[gscore]`：`endpoint`、`bot_id`、`enabled_groups`、`node_sender_id`、`node_sender_nickname`，用于设置服务连接、群范围和转发身份。
+- `[cat]`、`[muri]`：仅 `white_groups`，控制可响应的群。
+- `[[cron.jobs]]`：`schedule`、`target`、`content`，配置推送时间、目标和文案；cron 表达式使用 UTC。
+
+完整字段见 `config.example.toml`，启用的应用不提供字段默认值。只将部署者确有必要修改的通用行为暴露为配置；muri 词库、cat API 地址及每次最多 3 张图、chat 的摘要文案、限流提示和发送间隔保留在应用代码里。解析失败时报告字段路径，不打印配置文件原文。
+
+配置默认从当前工作目录的 `config.toml` 读取，也可用 `KANAMI_CONFIG` 指定路径（相对路径仍相对于当前工作目录）。私有配置已被 gitignore，不要提交 token。
 
 ```bash
-# 如果 ENDPOINT 以 wss:// 打头
+# endpoint 以 wss:// 开头时
 cargo run --release --features=tls
 # 否则
 cargo run --release
-# 如果想改 log level
-LOG=debug cargo run --release
+# 指定配置路径和日志级别
+KANAMI_CONFIG=/path/to/config.toml LOG=debug cargo run --release
 ```
+
+使用 `run.sh` 部署时同样可设置 `KANAMI_CONFIG`，脚本会继承该环境变量。
+
+开发新应用时，参考 `src/application/template.rs` 实现 `Application`，在应用模块里定义带 `deny_unknown_fields` 的配置结构体，在 `src/config.rs` 增加对应的 `Option` 字段，并在 `src/application/mod.rs` 注册；同时更新 `config.example.toml`。
 
 ## Evaluation
 

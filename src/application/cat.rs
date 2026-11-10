@@ -4,16 +4,26 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use crate::config;
 use crate::protocol::event::{Event, MessageEvent};
 use crate::protocol::message::Segment;
+
+const API_URL: &str = "https://api.thecatapi.com/v1/images/search";
+const MAX_IMAGES: usize = 3;
 
 #[derive(Deserialize)]
 struct CatApiResponse {
     url: String,
 }
 
-pub struct CatApp;
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub white_groups: Vec<i64>,
+}
+
+pub struct CatApp {
+    config: &'static Config,
+}
 
 #[async_trait]
 impl super::Application for CatApp {
@@ -30,30 +40,30 @@ impl super::Application for CatApp {
 }
 
 impl CatApp {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(config: &'static Config) -> Self {
+        Self { config }
     }
 
     async fn handle_message_event(&self, event: &MessageEvent) -> Result<()> {
-        if let MessageEvent::Group(event) = event {
-            if !config::WHITE_GROUPS.contains(&event.group_id) {
-                // white list mode
-                return Ok(());
-            }
+        if let MessageEvent::Group(event) = event
+            && !self.config.white_groups.contains(&event.group_id)
+        {
+            // white list mode
+            return Ok(());
         }
 
         let raw_message = event.raw_message();
         let count = raw_message.matches('喵').count();
 
         if count > 0 {
-            let limit = count.min(3);
+            let limit = count.min(MAX_IMAGES);
             let img_urls = self.fetch_cat_images(limit).await?;
 
             // Take only the number of images requested (up to count)
             let images_to_send: Vec<Segment> = img_urls
                 .into_iter()
                 .take(count)
-                .map(|url| Segment::image(url))
+                .map(Segment::image)
                 .collect();
 
             if !images_to_send.is_empty() {
@@ -69,7 +79,7 @@ impl CatApp {
     async fn fetch_cat_images(&self, limit: usize) -> Result<Vec<String>> {
         let client = reqwest::Client::new();
         let response = client
-            .get("https://api.thecatapi.com/v1/images/search")
+            .get(API_URL)
             .query(&[("limit", limit)])
             .send()
             .await?;

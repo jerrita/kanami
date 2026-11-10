@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use serde::Deserialize;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{
@@ -10,14 +11,31 @@ use crate::{
     protocol::{event::Event, get_bot},
 };
 
-pub struct CronApp {
-    sched: Option<JobScheduler>,
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub jobs: Vec<JobConfig>,
 }
 
-async fn send_prompt(content: &str) -> Result<()> {
-    let bot = get_bot().await;
-    bot.send_group_message(config::MAIN_GROUP, content).await?;
-    Ok(())
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobConfig {
+    pub schedule: String,
+    pub content: String,
+    pub target: Target,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Target {
+    MainGroup {},
+    Group { id: i64 },
+    Private { id: i64 },
+}
+
+pub struct CronApp {
+    config: &'static Config,
+    sched: Option<JobScheduler>,
 }
 
 #[async_trait]
@@ -29,38 +47,33 @@ impl Application for CronApp {
     async fn on_load(&mut self) -> Result<()> {
         let sched = JobScheduler::new().await?;
 
-        sched
-            .add(Job::new_async("0 0 0 * * 5", |_uuid, _l| {
-                Box::pin(async move {
-                    if let Err(e) = send_prompt("周五啦！").await {
-                        log::error!("failed to send prompt: {}", e);
-                    }
-                })
-            })?)
-            .await?;
-        sched
-            .add(Job::new_async("0 0 0 * * 1", |_uuid, _l| {
-                Box::pin(async move {
-                    if let Err(e) = send_prompt("周一啦！").await {
-                        log::error!("failed to send prompt: {}", e);
-                    }
-                })
-            })?)
-            .await?;
-
-        sched
-            .add(Job::new_async("0 0 13 * * *", |_uuid, _l| {
-                Box::pin(async move {
-                    if let Err(e) = get_bot()
-                        .await
-                        .send_private_message(config::USER_1, "晚上好！今天记得打卡哦~")
-                        .await
-                    {
-                        log::error!("failed to send prompt: {}", e);
-                    }
-                })
-            })?)
-            .await?;
+        for job in &self.config.jobs {
+            sched
+                .add(Job::new_async(job.schedule.as_str(), move |_uuid, _l| {
+                    Box::pin(async move {
+                        let bot = get_bot().await;
+                        let result = match job.target {
+                            Target::MainGroup {} => {
+                                bot.send_group_message(
+                                    config::get().main_group,
+                                    job.content.as_str(),
+                                )
+                                .await
+                            }
+                            Target::Group { id } => {
+                                bot.send_group_message(id, job.content.as_str()).await
+                            }
+                            Target::Private { id } => {
+                                bot.send_private_message(id, job.content.as_str()).await
+                            }
+                        };
+                        if let Err(e) = result {
+                            log::error!("failed to send prompt: {}", e);
+                        }
+                    })
+                })?)
+                .await?;
+        }
 
         sched.start().await?;
         self.sched = Some(sched);
@@ -74,7 +87,10 @@ impl Application for CronApp {
 }
 
 impl CronApp {
-    pub fn new() -> Self {
-        Self { sched: None }
+    pub fn new(config: &'static Config) -> Self {
+        Self {
+            config,
+            sched: None,
+        }
     }
 }
