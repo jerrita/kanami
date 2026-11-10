@@ -4,7 +4,7 @@ use crate::protocol::get_bot;
 use crate::protocol::message::Segment;
 use anyhow::{Result, anyhow};
 use futures_util::{SinkExt, StreamExt};
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{
     connect_async_with_config,
@@ -15,13 +15,13 @@ type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// GSCore主循环，处理自动重连
-pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>, config: &'static Config) {
+pub async fn gscore_loop(mut receiver: mpsc::Receiver<MessageReceive>, config: Arc<Config>) {
     let mut retry = 0u32;
     loop {
-        match connect_gscore(config).await {
+        match connect_gscore(&config).await {
             Ok(ws) => {
                 retry = 0;
-                if let Err(e) = event_loop(ws, &mut receiver, config).await {
+                if let Err(e) = event_loop(ws, &mut receiver, &config).await {
                     log::warn!("GSCore event loop error: {}", e);
                 }
             }

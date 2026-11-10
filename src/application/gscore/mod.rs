@@ -11,7 +11,7 @@ mod daemon;
 mod model;
 use model::*;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub endpoint: String,
@@ -22,19 +22,26 @@ pub struct Config {
 }
 
 pub struct GSCoreAdapter {
-    config: &'static Config,
+    config: Arc<Config>,
     sender: Option<mpsc::Sender<MessageReceive>>,
     connection_starting: bool,
 }
 
 #[async_trait]
 impl super::Application for GSCoreAdapter {
-    fn name(&self) -> &str {
-        "gscore adapter"
+    const NAME: &'static str = "gscore";
+    type Config = Config;
+
+    fn new(config: Config) -> Result<Self> {
+        let config = Arc::new(config);
+        Ok(Self {
+            config,
+            sender: None,
+            connection_starting: false,
+        })
     }
 
-    async fn on_load(&mut self) -> Result<()> {
-        log::info!("app <{}> loaded", self.name());
+    async fn start(&mut self) -> Result<()> {
         self.start_gscore_connection().await?;
         Ok(())
     }
@@ -47,7 +54,7 @@ impl super::Application for GSCoreAdapter {
                 return Ok(());
             }
             if let Some(sender) = &self.sender {
-                let message_receive = MessageReceive::new(msg_event, self.config);
+                let message_receive = MessageReceive::new(msg_event, &self.config);
                 if let Err(e) = sender.send(message_receive).await {
                     log::info!(
                         "GSCore handler unavailable ({}), restarting connection...",
@@ -66,14 +73,6 @@ impl super::Application for GSCoreAdapter {
 }
 
 impl GSCoreAdapter {
-    pub fn new(config: &'static Config) -> Self {
-        Self {
-            config,
-            sender: None,
-            connection_starting: false,
-        }
-    }
-
     async fn start_gscore_connection(&mut self) -> Result<()> {
         if self.sender.is_some() || self.connection_starting {
             return Ok(()); // Already connected or connecting
@@ -84,7 +83,7 @@ impl GSCoreAdapter {
         self.sender = Some(tx);
         self.connection_starting = false;
 
-        let config = self.config;
+        let config = self.config.clone();
         tokio::spawn(async move {
             daemon::gscore_loop(rx, config).await;
         });

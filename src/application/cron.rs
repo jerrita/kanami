@@ -11,13 +11,13 @@ use crate::{
     protocol::{event::Event, get_bot},
 };
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub jobs: Vec<JobConfig>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobConfig {
     pub schedule: String,
@@ -25,7 +25,7 @@ pub struct JobConfig {
     pub target: Target,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Target {
     MainGroup {},
@@ -34,22 +34,30 @@ pub enum Target {
 }
 
 pub struct CronApp {
-    config: &'static Config,
+    config: Config,
     sched: Option<JobScheduler>,
 }
 
 #[async_trait]
 impl Application for CronApp {
-    fn name(&self) -> &str {
-        "cron"
+    const NAME: &'static str = "cron";
+    type Config = Config;
+
+    fn new(config: Config) -> Result<Self> {
+        Ok(Self {
+            config,
+            sched: None,
+        })
     }
 
-    async fn on_load(&mut self) -> Result<()> {
+    async fn start(&mut self) -> Result<()> {
         let sched = JobScheduler::new().await?;
 
         for job in &self.config.jobs {
+            let scheduled_job = job.clone();
             sched
                 .add(Job::new_async(job.schedule.as_str(), move |_uuid, _l| {
+                    let job = scheduled_job.clone();
                     Box::pin(async move {
                         let bot = get_bot().await;
                         let result = match job.target {
@@ -77,20 +85,10 @@ impl Application for CronApp {
 
         sched.start().await?;
         self.sched = Some(sched);
-        log::info!("app <{}> loaded", self.name());
         Ok(())
     }
 
     async fn on_event(&mut self, _event: Arc<Event>) -> Result<()> {
         Ok(())
-    }
-}
-
-impl CronApp {
-    pub fn new(config: &'static Config) -> Self {
-        Self {
-            config,
-            sched: None,
-        }
     }
 }

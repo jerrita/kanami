@@ -23,7 +23,7 @@ Kanami：suckless 风格的 QQ bot 客户端，Rust 编写，对接 NapCat（One
 - `src/protocol/adapter.rs`：核心。WebSocket 连接、事件分发、重连，以及到应用层的桥接。
 - `src/protocol/event/`、`src/protocol/message.rs`：OneBot 事件与消息类型。
 - `src/protocol/extension/`：OneBot 与 NapCat 扩展 API（`napcat` feature，默认开启）。
-- `src/application/mod.rs`：`Application` trait 与应用注册表。
+- `src/application/mod.rs`：`Application` trait 与应用注册表。先完成所有应用的 `new`、`start`，再连接 WS；重连不得重新调用应用生命周期方法。
 - `src/application/*`：各个应用（builtin、chat、cat、cron、gscore、muri、ping）。新应用参照 `template.rs` 实现 `Application`，在自身模块定义配置结构体，再到 `mod.rs` 注册；已有应用由 TOML 小节是否存在决定启用。
 
 ## 风格

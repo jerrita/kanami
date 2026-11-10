@@ -39,20 +39,24 @@ lazy_static! {
     };
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub white_groups: Vec<i64>,
 }
 
 pub struct MuriApp {
-    config: &'static Config,
+    config: Arc<Config>,
 }
 
 #[async_trait]
 impl super::Application for MuriApp {
-    fn name(&self) -> &str {
-        "muri"
+    const NAME: &'static str = "muri";
+    type Config = Config;
+
+    fn new(config: Config) -> Result<Self> {
+        let config = Arc::new(config);
+        Ok(Self { config })
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
@@ -69,11 +73,5 @@ impl super::Application for MuriApp {
             }
         }
         Ok(())
-    }
-}
-
-impl MuriApp {
-    pub fn new(config: &'static Config) -> Self {
-        Self { config }
     }
 }

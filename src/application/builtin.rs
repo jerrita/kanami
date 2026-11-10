@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {}
 
@@ -16,8 +16,13 @@ pub struct BuiltinApp {
 
 #[async_trait]
 impl super::Application for BuiltinApp {
-    fn name(&self) -> &str {
-        "builtin"
+    const NAME: &'static str = "builtin";
+    type Config = Config;
+
+    fn new(_config: Config) -> Result<Self> {
+        Ok(Self {
+            group_map: HashMap::new(),
+        })
     }
 
     async fn on_event(&mut self, event: Arc<event::Event>) -> Result<()> {
@@ -50,12 +55,6 @@ impl super::Application for BuiltinApp {
 }
 
 impl BuiltinApp {
-    pub fn new() -> Self {
-        Self {
-            group_map: HashMap::new(),
-        }
-    }
-
     async fn get_group_name(&mut self, group_id: i64) -> Result<&String> {
         if let std::collections::hash_map::Entry::Vacant(entry) = self.group_map.entry(group_id) {
             let bot = get_bot().await;

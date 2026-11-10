@@ -54,6 +54,8 @@ KANAMI_CONFIG=/path/to/config.toml LOG=debug cargo run --release
 
 开发新应用时，参考 `src/application/template.rs` 实现 `Application`，在应用模块里定义带 `deny_unknown_fields` 的配置结构体，在 `src/config.rs` 增加对应的 `Option` 字段，并在 `src/application/mod.rs` 注册；同时更新 `config.example.toml`。
 
+应用统一实现 `Application`：`NAME`、`Config`、`new`、`start` 和 `on_event`。启动时先构造所有应用，再依次完成 `start`，之后才连接 NapCat；构造或启动失败会退出。WS 重连只恢复连接，不重复启动应用。事件仍通过每个应用的互斥锁串行进入处理函数。
+
 ## Evaluation
 
 实验环境如下：

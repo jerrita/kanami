@@ -26,7 +26,7 @@ const SUMMARY_PREFIX: &str = "这是之前对话的摘要: ";
 const RATE_LIMIT_MESSAGE: &str = "你问得太快了，休息一下吧~";
 const REPLY_DELAY_MS: u64 = 100;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub token: String,
@@ -72,13 +72,13 @@ struct Choice {
 // Helper struct to reduce parameter passing
 struct ChatContext {
     client: Client,
-    config: &'static Config,
+    config: Arc<Config>,
     current_model: Arc<RwLock<String>>,
 }
 
 pub struct ChatApp {
     client: Client,
-    config: &'static Config,
+    config: Arc<Config>,
     current_model: Arc<RwLock<String>>,
     history: Arc<DashMap<i64, Vec<ChatMessage>>>,
     rate_limiter: Arc<DashMap<i64, Vec<Instant>>>,
@@ -86,15 +86,25 @@ pub struct ChatApp {
 
 #[async_trait]
 impl super::Application for ChatApp {
-    fn name(&self) -> &str {
-        "chat"
+    const NAME: &'static str = "chat";
+    type Config = Config;
+
+    fn new(config: Config) -> Result<Self> {
+        let config = Arc::new(config);
+        Ok(Self {
+            client: Client::new(),
+            config: config.clone(),
+            current_model: Arc::new(RwLock::new(config.default_model.clone())),
+            history: Arc::new(DashMap::new()),
+            rate_limiter: Arc::new(DashMap::new()),
+        })
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
         // Create context for concurrent processing
         let context = ChatContext {
             client: self.client.clone(),
-            config: self.config,
+            config: self.config.clone(),
             current_model: Arc::clone(&self.current_model),
         };
         let history = Arc::clone(&self.history);
@@ -185,7 +195,8 @@ impl ChatApp {
             }
 
             // Check rate limit
-            if let Err(msg) = Self::check_rate_limit(&rate_limiter, user_id, context.config).await {
+            if let Err(msg) = Self::check_rate_limit(&rate_limiter, user_id, &context.config).await
+            {
                 event.reply(msg, true).await?;
                 return Ok(());
             }
@@ -212,7 +223,7 @@ impl ChatApp {
 
             match cmd {
                 "!ai" => {
-                    let mut messages = vec![Self::create_system_message(context.config)];
+                    let mut messages = vec![Self::create_system_message(&context.config)];
                     messages.push(user_message);
                     Self::execute_chat_and_reply(&context, event, &mut messages).await?;
                     history.insert(user_id, messages);
@@ -225,7 +236,7 @@ impl ChatApp {
                         hist.len()
                     );
                     if hist.is_empty() {
-                        hist.push(Self::create_system_message(context.config));
+                        hist.push(Self::create_system_message(&context.config));
                         debug!("!aip - initialized empty history with system message");
                     }
                     if hist.len() >= context.config.history_max_length {
@@ -237,7 +248,7 @@ impl ChatApp {
                         let summary = Self::summarize_history(&context, &hist).await?;
                         debug!("!aip - generated summary: {}", summary);
                         *hist = vec![
-                            Self::create_system_message(context.config),
+                            Self::create_system_message(&context.config),
                             ChatMessage {
                                 role: "system".to_string(),
                                 content: ChatContent::Text(format!(
@@ -270,16 +281,6 @@ impl ChatApp {
 }
 
 impl ChatApp {
-    pub fn new(config: &'static Config) -> Self {
-        Self {
-            client: Client::new(),
-            config,
-            current_model: Arc::new(RwLock::new(config.default_model.clone())),
-            history: Arc::new(DashMap::new()),
-            rate_limiter: Arc::new(DashMap::new()),
-        }
-    }
-
     fn create_system_message(config: &Config) -> ChatMessage {
         ChatMessage {
             role: "system".to_string(),
@@ -397,7 +398,7 @@ impl ChatApp {
             messages.len()
         );
 
-        Self::send_reply(context.config, event, res_text).await
+        Self::send_reply(&context.config, event, res_text).await
     }
 
     pub fn split_text_by_length(text: &str, max_length: std::num::NonZeroUsize) -> Vec<String> {
