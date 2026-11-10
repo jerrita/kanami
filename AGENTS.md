@@ -4,14 +4,16 @@ Kanami：suckless 风格的 QQ bot 客户端，Rust 编写，对接 NapCat（One
 
 ## 硬规则
 
-- 不要读取、打印或修改 `src/config.rs`：它是用户的私有配置（含 token、endpoint），已被 gitignore。需要知道配置项时看 `src/config.def.rs`。
-- 新增配置项时只改 `src/config.def.rs`，并在汇报里说明用户需要同步到自己的 `config.rs`。
+- 不要读取或打印 `config.toml`（以及 `KANAMI_CONFIG` 指向的配置文件）：它是用户的私有配置，含 token、endpoint。
+- 系统配置项以 `src/config.rs` 为准，应用配置项以各应用模块的配置结构体为准；新增或修改配置项时同步更新 `config.example.toml`。
+- 只有逻辑通用、部署者确有必要修改的项才暴露为配置；应用自带数据和实现细节保留在应用代码中（如 muri 词库、cat API 地址及图片数量上限、chat 摘要文案和发送间隔）。
+- 配置解析错误保留字段路径，不打印配置文件原文。
 - 不要改 `.cargo/config.toml`。
 
 ## 常用命令
 
 - 构建：`cargo build --release`
-- 运行：`cargo run --release`；ENDPOINT 是 `wss://` 时加 `--features=tls`
+- 运行：`cargo run --release`；`endpoint` 是 `wss://` 时加 `--features=tls`
 - 日志级别：`LOG=debug cargo run --release`
 - 部署：`run.sh`（`LOG=info TZ=Asia/Shanghai`，后台运行，输出到 `log`）
 
@@ -22,7 +24,7 @@ Kanami：suckless 风格的 QQ bot 客户端，Rust 编写，对接 NapCat（One
 - `src/protocol/event/`、`src/protocol/message.rs`：OneBot 事件与消息类型。
 - `src/protocol/extension/`：OneBot 与 NapCat 扩展 API（`napcat` feature，默认开启）。
 - `src/application/mod.rs`：`Application` trait 与应用注册表。
-- `src/application/*`：各个应用（builtin、chat、cat、cron、gscore、muri、ping）。新应用参照 `template.rs` 实现 `Application`，再到 `mod.rs` 末尾注册。
+- `src/application/*`：各个应用（builtin、chat、cat、cron、gscore、muri、ping）。新应用参照 `template.rs` 实现 `Application`，在自身模块定义配置结构体，再到 `mod.rs` 注册；已有应用由 TOML 小节是否存在决定启用。
 
 ## 风格
 
