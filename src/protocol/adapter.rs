@@ -1,5 +1,5 @@
 // to connect to a ws backend
-use crate::{application::APPS, config, protocol::event::Event};
+use crate::{application::AppType, config, protocol::event::Event};
 use anyhow::{Result, anyhow};
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt, stream::SplitStream};
@@ -45,6 +45,7 @@ pub struct Request {
 }
 
 pub async fn listener(
+    apps: Vec<AppType>,
     pending_requests: Arc<DashMap<String, PendingRequest>>,
     mut receiver: SplitStream<WsStream>,
 ) {
@@ -69,8 +70,9 @@ pub async fn listener(
                         match event {
                             Ok(event) => {
                                 let event = Arc::new(event);
-                                for app in APPS.iter() {
+                                for app in &apps {
                                     let event = event.clone();
+                                    let app = app.clone();
                                     tokio::spawn(async move {
                                         let mut app = app.lock().await;
                                         if let Err(e) = app.on_event(event).await {
@@ -123,7 +125,7 @@ async fn connect() -> Result<WsStream> {
     Ok(ws)
 }
 
-async fn event_loop(ws: WsStream) -> Result<()> {
+async fn event_loop(ws: WsStream, apps: Vec<AppType>) -> Result<()> {
     let (mut ws_sender, ws_receiver) = ws.split();
     let (req_tx, mut req_rx) = mpsc::channel(5);
 
@@ -132,7 +134,7 @@ async fn event_loop(ws: WsStream) -> Result<()> {
     let pending_requests_cloned = pending_requests.clone();
 
     let task_event_listener = tokio::spawn(async move {
-        listener(pending_requests_cloned, ws_receiver).await;
+        listener(apps, pending_requests_cloned, ws_receiver).await;
     });
 
     // 定期清理过期请求的任务
@@ -186,15 +188,6 @@ async fn event_loop(ws: WsStream) -> Result<()> {
         }
     });
 
-    for app in APPS.iter() {
-        tokio::spawn(async move {
-            let mut app = app.lock().await;
-            if let Err(e) = app.on_load().await {
-                log::warn!("app <{}> on_load error: {}", app.name(), e)
-            }
-        });
-    }
-
     tokio::select! {
         _ = task_event_listener => {
             log::info!("Listener task endded");
@@ -209,12 +202,12 @@ async fn event_loop(ws: WsStream) -> Result<()> {
     Ok(())
 }
 
-pub async fn launch() -> ! {
+pub async fn launch(apps: Vec<AppType>) -> ! {
     let mut retry: u32 = 0;
     loop {
         match connect().await {
             Ok(ws) => {
-                if let Err(e) = event_loop(ws).await {
+                if let Err(e) = event_loop(ws, apps.clone()).await {
                     log::error!("loop error: {}", e);
                 }
             }

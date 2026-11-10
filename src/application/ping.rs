@@ -15,8 +15,11 @@ pub struct PingApp;
 
 #[async_trait]
 impl super::Application for PingApp {
-    fn name(&self) -> &str {
-        "ping"
+    const NAME: &'static str = "ping";
+    type Config = Config;
+
+    fn new(_config: Config) -> Result<Self> {
+        Ok(Self {})
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
@@ -32,11 +35,5 @@ impl super::Application for PingApp {
             }
         }
         Ok(())
-    }
-}
-
-impl PingApp {
-    pub fn new() -> Self {
-        Self {}
     }
 }

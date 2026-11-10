@@ -1,56 +1,62 @@
 # 复制为 config.toml 后填写实际连接信息。系统字段均必填。
 endpoint = "ws://127.0.0.1:3001"
 token = "replace-with-napcat-token"
+owner = "owner"
+apps = ["builtin", "ping", "gscore", "cat", "chat", "cron", "muri"]
+
+# 所有群号/QQ 号均可写整数或对应命名空间的别名字符串；未定义的别名会报错。
+[alias.group]
+main = 1145141919810
+
+[alias.user]
 owner = 1145141919810
-main_group = 1145141919810
 
-# 存在应用小节即启用；禁用时删除整个小节（包括它的子表）。
-# 应用一旦启用，其所有字段都必须填写。空白名单表示不响应任何群，私聊不受影响。
-[builtin]
-
-[ping]
-
-[gscore]
+# apps 按列表顺序构造和启动应用；从列表删除名字即可停用并保留配置。
+# 无配置的应用无需空段；启用的应用不提供字段默认值。
+# 每个应用可选 groups/users = { allow = [...] } 或 { deny = [...] }，二选一。
+# 不写则不限制；allow=[] 拒绝所有带相应 ID 的事件，deny=[] 不限制。
+# groups 覆盖所有带 group_id 的消息、通知、请求，users 同理。
+[app.gscore]
 endpoint = "ws://127.0.0.1:8765/ws/kanami"
 bot_id = "Kanami"
-enabled_groups = [1145141919810]
-node_sender_id = "1145141919810"
+groups = { allow = ["main"] }
+node_sender_id = "owner"
 node_sender_nickname = "Kanami"
 
-[cat]
-white_groups = [1145141919810]
+[app.cat]
+groups = { allow = ["main"] }
 
-[chat]
+[app.chat]
+users = { deny = [19260817] }
 token = "replace-with-openai-token"
 # 请求地址为 base_url + /v1/chat/completions。
 base_url = "https://api.openai.com"
 default_model = "claude-sonnet-4-20250514"
 system_prompt = "你是一个AI助手，名字叫 Chihaya Anon。你的回答需要遵守中国法律，拒绝回答任何跟政治有关的问题以及涉嫌人身霸凌的问题。若无指定，使用中文进行回答。你的回答为无代码块包裹的rst格式。不要使用粗体和斜体，除非你有充分的理由那么做。"
-white_groups = [1145141919810]
+groups = { allow = ["main"] }
 rate_limit_window_secs = 60
 rate_limit_max = 3
 history_max_length = 6
 # 按 UTF-8 字节计数，必须大于零。
 max_message_length = 2800
 
-[cron]
-# cron 表达式包含秒，使用 UTC；target.type 可为 main_group、group 或 private。
-# main_group 使用系统 main_group；group/private 必须提供 id。
-[[cron.jobs]]
+[app.cron]
+# cron 表达式包含秒，使用 UTC；target.type 可为 group 或 private，均必须提供 id。
+[[app.cron.jobs]]
 schedule = "0 0 0 * * 5"
 content = "周五啦！"
-target = { type = "main_group" }
+target = { type = "group", id = "main" }
 
-[[cron.jobs]]
+[[app.cron.jobs]]
 schedule = "0 0 0 * * 1"
 content = "周一啦！"
 target = { type = "group", id = 1145141919810 }
 
-[[cron.jobs]]
+[[app.cron.jobs]]
 schedule = "0 0 13 * * *"
 content = "晚上好！今天记得打卡哦~"
-target = { type = "private", id = 1145141919810 }
+target = { type = "private", id = "owner" }
 
-[muri]
-white_groups = [1145141919810]
+[app.muri]
+groups = { allow = ["main"] }
 

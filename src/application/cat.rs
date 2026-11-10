@@ -10,25 +10,24 @@ use crate::protocol::message::Segment;
 const API_URL: &str = "https://api.thecatapi.com/v1/images/search";
 const MAX_IMAGES: usize = 3;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct CatApiResponse {
     url: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    pub white_groups: Vec<i64>,
-}
+pub struct Config {}
 
-pub struct CatApp {
-    config: &'static Config,
-}
+pub struct CatApp;
 
 #[async_trait]
 impl super::Application for CatApp {
-    fn name(&self) -> &str {
-        "cat"
+    const NAME: &'static str = "cat";
+    type Config = Config;
+
+    fn new(_config: Config) -> Result<Self> {
+        Ok(Self)
     }
 
     async fn on_event(&mut self, event: Arc<Event>) -> Result<()> {
@@ -40,18 +39,7 @@ impl super::Application for CatApp {
 }
 
 impl CatApp {
-    pub fn new(config: &'static Config) -> Self {
-        Self { config }
-    }
-
     async fn handle_message_event(&self, event: &MessageEvent) -> Result<()> {
-        if let MessageEvent::Group(event) = event
-            && !self.config.white_groups.contains(&event.group_id)
-        {
-            // white list mode
-            return Ok(());
-        }
-
         let raw_message = event.raw_message();
         let count = raw_message.matches('喵').count();
 

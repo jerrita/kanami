@@ -15,5 +15,6 @@ async fn main() -> Result<()> {
     config::load()?;
     logger::init();
     log::info!("Hello Kanami Bot!");
-    adapter::launch().await
+    let apps = application::start().await?;
+    adapter::launch(apps).await
 }
