@@ -3,6 +3,8 @@ use std::{env, fs, path::PathBuf, sync::OnceLock};
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 
+use crate::application::{builtin, ping};
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -19,6 +21,8 @@ pub struct Config {
     pub user_1: i64,
     pub openai_token: String,
     pub openai_base: String,
+    pub builtin: Option<builtin::Config>,
+    pub ping: Option<ping::Config>,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();

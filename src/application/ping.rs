@@ -7,6 +7,10 @@ use crate::{
     protocol::{adapter::ROUND_START_TIME, event::Event},
 };
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {}
+
 pub struct PingApp;
 
 #[async_trait]

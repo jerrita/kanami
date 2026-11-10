@@ -13,12 +13,12 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
-mod builtin;
+pub(crate) mod builtin;
 mod cat;
 mod chat;
 mod gscore;
 mod muri;
-mod ping;
+pub(crate) mod ping;
 
 pub mod cron;
 
@@ -41,16 +41,23 @@ fn create_app(app: Box<dyn Application>) -> AppType {
 }
 
 lazy_static! {
-    pub static ref APPS: Vec<AppType> = vec![
-        create_app(Box::new(BuiltinApp::new())),
-        create_app(Box::new(PingApp::new())),
-        create_app(Box::new(GSCoreAdapter::new())),
-        create_app(Box::new(CatApp::new())),
-        create_app(Box::new(CronApp::new())),
-        create_app(Box::new(ChatApp::new(
-            config::get().openai_token.as_str(),
-            config::get().openai_base.as_str()
-        ))),
-        create_app(Box::new(MuriApp::new()))
-    ];
+    pub static ref APPS: Vec<AppType> = {
+        let config = config::get();
+        let mut apps = Vec::new();
+        if config.builtin.is_some() {
+            apps.push(create_app(Box::new(BuiltinApp::new())));
+        }
+        if config.ping.is_some() {
+            apps.push(create_app(Box::new(PingApp::new())));
+        }
+        apps.push(create_app(Box::new(GSCoreAdapter::new())));
+        apps.push(create_app(Box::new(CatApp::new())));
+        apps.push(create_app(Box::new(CronApp::new())));
+        apps.push(create_app(Box::new(ChatApp::new(
+            config.openai_token.as_str(),
+            config.openai_base.as_str(),
+        ))));
+        apps.push(create_app(Box::new(MuriApp::new())));
+        apps
+    };
 }
